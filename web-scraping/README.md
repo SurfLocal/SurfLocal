@@ -2,11 +2,23 @@
 
 This repository contains Dockerfiles and scripts for running web scrapers that collect surf-related data. The scrapers are built as Docker images and executed in a Kubernetes environment using Argo Workflows.
 
-## Docker Image Builds
+## Automated Docker Image Builds
 
-Each scraper is built using web_scraper.Dockerfile, with build arguments provided at runtime. Sensitive information such as database credentials and API keys are passed as build arguments but will be stored securely in GitHub Actions secrets and repository variables.
+Docker images for the scrapers are automatically built and pushed to Docker Hub using a GitHub Actions workflow defined in `.github/workflows/docker-build.yml`. The workflow is triggered when changes are pushed to the `main` or `qa` branches via a pull request. It tags the images accordingly and securely retrieves necessary secrets for the build process.
 
-### Swell Scraper
+### Build Process
+
+The GitHub Actions workflow:
+1. Runs when a push to the `main` or `qa` branches occurs (only through a PR merge).
+2. Checks out the repository.
+3. Sets up Docker Buildx.
+4. Extracts the latest commit hash to use for tagging.
+5. Determines the target branch and assigns a tag prefix (`qa` for `qa`, `prod` for `main`).
+6. Builds the Docker images with appropriate build arguments (database credentials, API keys, etc.).
+7. Tags images with `<prefix>-latest` and `<prefix>-<commit-hash>`.
+8. Pushes the built images to Docker Hub.
+
+## Swell Scraper
 
 This scraper collects wave and swell data from NOAA buoys. The extracted information includes:
 - Wave height
@@ -19,21 +31,7 @@ This scraper collects wave and swell data from NOAA buoys. The extracted informa
 - Wave steepness
 - Average wave period
 
-#### Build & Run Commands
-
-```
-docker build -f web_scraper.Dockerfile \
-  --build-arg DB_HOST=<RASPBERRY_PI_IP> \
-  --build-arg DB_USER=<DB_USER> \
-  --build-arg DB_PASSWORD=<DB_PASSWORD> \
-  --build-arg DB_NAME=surf_analytics \
-  --build-arg JOB_NAME=swell_scraper_hourly.py \
-  -t argo-swell-scraper-hourly:latest .
-
-docker run --name argo-swell-scraper-hourly argo-swell-scraper-hourly:latest
-```
-
-### Wind Scraper
+## Wind Scraper
 
 This scraper fetches real-time wind data from the OpenWeather API. The extracted information includes:
 - Wind speed
@@ -57,8 +55,8 @@ docker run --name argo-wind-scraper-hourly argo-wind-scraper-hourly:latest
 
 ## Deployment and Secrets Management
 
-These images will be built and deployed using GitHub Actions. All sensitive information, such as database credentials and API keys, is securely stored in GitHub repository secrets and environment variables. The build process retrieves these secrets at runtime to ensure security and maintainability.
+All sensitive information, such as database credentials and API keys, is securely stored in GitHub repository secrets. These secrets are automatically retrieved by the GitHub Actions workflow during the build process.
 
 ## Database Configuration
 
-The PostgreSQL database used for storing scraped data is hosted on a Raspberry Pi. The DB_HOST build argument should be set to the local IP address of the Raspberry Pi running the database instance.
+The PostgreSQL database used for storing scraped data is hosted on a Raspberry Pi. The workflow passes the appropriate database configuration as build arguments, ensuring seamless integration during deployment.
