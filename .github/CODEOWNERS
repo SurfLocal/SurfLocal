@@ -1,0 +1,28 @@
+# Global owners
+* @SurfLocal/all-members
+
+# ----------------- #
+# Code Owner Update #
+# ----------------- #
+/.github/CODEOWNERS @robronayne
+/.github/required-reviewers.yml @robronayne
+
+# -------------- #
+# Ansible owners #
+# -------------- #
+/ansible/ @SurfLocal/infra
+
+# ----------- #
+# Helm owners #
+# ----------- #
+/helm/prometheus @SurfLocal/infra
+
+# --------------- #
+# Database owners #
+# --------------- #
+/postgres @SurfLocal/infra @SurfLocal/backend
+
+# ------------------- #
+# Web-scraping owners #
+# ------------------- #
+/web-scraping/ @SurfLocal/backend
