@@ -1,19 +1,21 @@
 <p align="center">
-  <img src="https://github.com/robronayne/PiClusterFlow/blob/media/projectLogo.png?raw=true" width="800" alt="Project Logo">
+  <img src="https://github.com/SurfLocal/SurfLocal/blob/media/surfLocal.png?raw=true" width="250" alt="Project Logo">
 </p>
 
-# PiClusterFlow
+# Surf Local
 
-This repository contains scripts and configuration files to set up a Raspberry Pi cluster with Prometheus, Grafana, and K3s. The motivation behind this project is to create a small-scale, efficient, and flexible cluster environment for running Kubernetes and Airflow. The goal is to automate DAG scheduling for various web scraping scripts, including automated campsite booking and scraping for surfing conditions.
+This is a surfing app that integrates AI-powered swell and condition forecasting, alongside a social platform for surfers to connect and share their sessions. Users can log their surf sessions, share insights, and interact with others within the surfing community.
 
-<p align="center">
-  <img src="https://github.com/robronayne/PiClusterFlow/blob/media/raspberrypi.jpg?raw=true" width="400" alt="Pi Cluster Art">
-</p>
+## Key Features:
+- AI-Driven Forecasting: Get accurate swell and condition forecasts based on AI models.
+- Session Logging: Log details of your surf sessions, including date, time, surf spot, wave conditions, and more.
+- Social Interaction: Connect with other surfers, share session details, and interact with the community.
+- Real-Time Data: AI-powered predictions for surf conditions, utilizing web scraping to gather data.
 
 ## Directory Structure
 
 ```
-PiClusterFlow/
+SurfLocal/
 ├── ansible/
 │   ├── ansible.cfg
 │   ├── hosts
@@ -34,26 +36,19 @@ PiClusterFlow/
 │       ├── Chart.yaml
 │       ├── values.yaml
 │       └── templates/
+├── postgres/
+│   ├── roles/
+│   ├── schemas/
+│   ├── tables/
+│   ├── users/
+│   └── database.sql
+├── web-scraping/
+│   ├── jobs/
+│   └── webscraper.Dockerfile
 ├── setup_node.sh
 ├── init_ansible.sh
 └── README.md
 ```
-
-## Hardware Configuration
-
-To set up your Raspberry Pi cluster, you'll need the following hardware:
-
-- Raspberry Pi 4 Model B — 8 GB RAM (x4)
-- Raspberry Pi PoE+ HAT (x4)
-- Black Ethernet Patch Cable — 0.5 Feet (x4)
-- Blue Ethernet Patch Cable — 2 Feet
-- TP-Link TL-SG1005P, 5 Port PoE Switch
-- UCTRONICS Enclosure for Raspberry Pi Cluster
-- SanDisk 32GB microSD (x4)
-- USB to SATA Adapter for SSD
-- HP S750 256GB SSD
-
-For a detailed guide on setting up the hardware, please refer to this article: [Installing Airflow on a Raspberry Pi Cluster: Hardware and Setup](https://robronayne.medium.com/installing-airflow-on-a-raspberry-pi-cluster-hardware-and-setup-7b34ae5655bd)
 
 ## Getting Started
 
@@ -61,8 +56,8 @@ For a detailed guide on setting up the hardware, please refer to this article: [
 
 Clone the repository and navigate into it:
 ```bash
-git clone https://github.com/robronayne/PiClusterFlow.git
-cd PiClusterFlow
+git clone https://github.com/SurfLocal/SurfLocal.git
+cd SurfLocal
 ```
 
 ### Install the Raspberry Pi OS on microSD Cards
