@@ -2,9 +2,15 @@
   <img src="https://github.com/SurfLocal/SurfLocal/blob/media/surfLocal.png?raw=true" width="250" alt="Project Logo">
 </p>
 
-# Surf Local
+# SurfLocal
 
 This is a surfing app that integrates AI-powered swell and condition forecasting, alongside a social platform for surfers to connect and share their sessions. Users can log their surf sessions, share insights, and interact with others within the surfing community.
+
+## Contributing
+
+We welcome contributions to this project! If you're interested in contributing, please read our [Contributing Guidelines](CONTRIBUTING.md) for details on how to get started.
+
+By following these guidelines, you'll help us maintain a consistent development process and ensure a smooth experience for all contributors.
 
 ## Key Features:
 - AI-Driven Forecasting: Get accurate swell and condition forecasts based on AI models.
