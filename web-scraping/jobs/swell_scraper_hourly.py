@@ -105,7 +105,7 @@ def insert_swell_data(swell_data, logger):
         swell_data (dict): A dictionary containing swell data to be inserted into the database.
         logger (Logger): The logger instance to log messages.
     """
-    with PostgresConnection(DB_HOST, DB_USER, DB_PASSWORD, DB_NAME) as db_connection:
+    with PostgresConnection(DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, logger) as db_connection:
         if db_connection.insert("ingested.swell_data", {
             "timestamp": swell_data['timestamp'],
             "buoy_id": swell_data['buoy_id'],
@@ -131,7 +131,7 @@ def get_buoy_ids(logger):
     Returns:
         list: A list of buoy IDs fetched from the database.
     """
-    with PostgresConnection(DB_HOST, DB_USER, DB_PASSWORD, DB_NAME) as db_connection:
+    with PostgresConnection(DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, logger) as db_connection:
         buoy_ids = db_connection.select("reference.buoy_info", "id")
     
     if not buoy_ids:
