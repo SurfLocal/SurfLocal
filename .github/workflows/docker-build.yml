@@ -61,6 +61,8 @@ jobs:
                        --build-arg DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
                        --build-arg DB_NAME=${{ secrets.DB_NAME }} \
                        --build-arg API_KEY=${{ secrets.API_KEY }} \
+                       --build-arg MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }} \
+                       --build-arg MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }} \
                        -t ${IMAGE_NAME}:${IMAGE_TAG} \
                        -t ${IMAGE_NAME}:${TAG_PREFIX}-latest \
                        -f web-scraping/web_scraper.Dockerfile .

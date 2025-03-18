@@ -1,4 +1,5 @@
 beautifulsoup4
+boto3
 lxml
 mysql-connector-python
 pandas

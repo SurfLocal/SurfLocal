@@ -33,12 +33,13 @@ def extract_number(text):
     match = re.search(r"[\d\.]+", str(text))
     return match.group() if match else None
 
-def fetch_swell_data(buoy_id):
+def fetch_swell_data(buoy_id, logger):
     """
     Fetch swell data from the NOAA buoy website and parse relevant wave and swell information.
 
     Args:
         buoy_id (str): The ID of the buoy to fetch data for.
+        logger (Logger): The logger instance to log messages.
 
     Returns:
         dict or None: A dictionary containing the parsed wave and swell data, or None if the data could not be fetched or parsed.
@@ -47,21 +48,21 @@ def fetch_swell_data(buoy_id):
     response = requests.get(url)
     
     if response.status_code != 200:
-        Logger.log_json("ERROR", f"Failed to fetch data for buoy ID {buoy_id}", {"buoy_id": buoy_id})
+        logger.log_json("ERROR", f"Failed to fetch data for buoy ID {buoy_id}", {"buoy_id": buoy_id})
         return None
 
     soup = BeautifulSoup(response.text, "html.parser")
     tables = soup.find_all("table")
 
     if not tables:
-        Logger.log_json("WARNING", f"No tables found on the page for buoy ID {buoy_id}", {"buoy_id": buoy_id})
+        logger.log_json("WARNING", f"No tables found on the page for buoy ID {buoy_id}", {"buoy_id": buoy_id})
         return None
 
     # Search for the detailed wave summary table
     detailed_table = next((table for table in tables if "Wave Summary" in table.text), None)
 
     if not detailed_table:
-        Logger.log_json("WARNING", f"Detailed wave summary table not found for buoy ID {buoy_id}", {"buoy_id": buoy_id})
+        logger.log_json("WARNING", f"Detailed wave summary table not found for buoy ID {buoy_id}", {"buoy_id": buoy_id})
         return None
 
     # Wrap in StringIO to avoid pandas warning
@@ -79,7 +80,7 @@ def fetch_swell_data(buoy_id):
         wave_steepness = df.iloc[8, 1] if len(df) > 8 else None
         average_wave_period = extract_number(df.iloc[9, 1]) if len(df) > 9 else None
     except IndexError:
-        Logger.log_json("ERROR", f"Failure to extract data from table for buoy ID {buoy_id}", {"buoy_id": buoy_id})
+        logger.log_json("ERROR", f"Failure to extract data from table for buoy ID {buoy_id}", {"buoy_id": buoy_id})
         return None
 
     return {
@@ -96,14 +97,15 @@ def fetch_swell_data(buoy_id):
         "average_wave_period": average_wave_period
     }
 
-def insert_swell_data(swell_data):
+def insert_swell_data(swell_data, logger):
     """
     Insert parsed swell data into the PostgreSQL database.
 
     Args:
         swell_data (dict): A dictionary containing swell data to be inserted into the database.
+        logger (Logger): The logger instance to log messages.
     """
-    with PostgresConnection(DB_HOST, DB_USER, DB_PASSWORD, DB_NAME) as db_connection:
+    with PostgresConnection(DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, logger) as db_connection:
         if db_connection.insert("ingested.swell_data", {
             "timestamp": swell_data['timestamp'],
             "buoy_id": swell_data['buoy_id'],
@@ -117,37 +119,38 @@ def insert_swell_data(swell_data):
             "wave_steepness": swell_data['wave_steepness'],
             "average_wave_period": swell_data['average_wave_period']
         }):
-            Logger.log_json("INFO", "Swell data inserted successfully", {"buoy_id": swell_data['buoy_id']})
+            logger.log_json("INFO", "Swell data inserted successfully", {"buoy_id": swell_data['buoy_id']})
         else:
-            Logger.log_json("ERROR", "Failed to insert swell data", {"buoy_id": swell_data['buoy_id'], "data": swell_data})
+            logger.log_json("ERROR", "Failed to insert swell data", {"buoy_id": swell_data['buoy_id'], "data": swell_data})
 
 
-def get_buoy_ids():
+def get_buoy_ids(logger):
     """
     Retrieve the list of buoy IDs from the database.
 
     Returns:
         list: A list of buoy IDs fetched from the database.
     """
-    with PostgresConnection(DB_HOST, DB_USER, DB_PASSWORD, DB_NAME) as db_connection:
+    with PostgresConnection(DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, logger) as db_connection:
         buoy_ids = db_connection.select("reference.buoy_info", "id")
     
     if not buoy_ids:
-        Logger.log_json("WARNING", "No buoy IDs found in the database")
+        logger.log_json("WARNING", "No buoy IDs found in the database")
         return []
 
     return [buoy_id[0] for buoy_id in buoy_ids]
 
 if __name__ == "__main__":
-    buoy_ids = get_buoy_ids()
+    with Logger(job_name="swell-scraper-hourly") as logger:
+        buoy_ids = get_buoy_ids(logger)
 
-    if not buoy_ids:
-        Logger.log_json("WARNING", "No buoy IDs to process swell data for")
+        if not buoy_ids:
+            logger.log_json("WARNING", "No buoy IDs to process swell data for")
 
-    for buoy_id in buoy_ids:
-        swell_data = fetch_swell_data(buoy_id)
+        for buoy_id in buoy_ids:
+            swell_data = fetch_swell_data(buoy_id, logger)
 
-        if swell_data:
-            insert_swell_data(swell_data)
-        else:
-            Logger.log_json("ERROR", "Failed to retrieve or insert swell data", {"buoy_id": buoy_id})
+            if swell_data:
+                insert_swell_data(swell_data, logger)
+            else:
+                logger.log_json("ERROR", "Failed to retrieve or insert swell data", {"buoy_id": buoy_id})
