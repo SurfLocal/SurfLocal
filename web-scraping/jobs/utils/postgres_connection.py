@@ -28,8 +28,7 @@ class PostgresConnection:
             if self.conn:
                 self.cursor = self.conn.cursor()
         except psycopg2.Error as e:
-            if self.logger:
-                self.logger.log_json("ERROR", f"Unable to connect to PostgreSQL database: {e}", {"host": self.host})
+            self.logger.log_json("ERROR", f"Unable to connect to PostgreSQL database: {e}", {"host": self.host})
             self.conn = None
 
     def close(self):
@@ -60,12 +59,10 @@ class PostgresConnection:
             self.conn.commit()
             return True
         except psycopg2.Error as e:
-            if self.logger:
-                self.logger.log_json("ERROR", f"Failure executing query: {e}")
+            self.logger.log_json("ERROR", f"Failure executing query: {e}")
             return None
         except ConnectionError as e:
-            if self.logger:
-                self.logger.log_json("ERROR", f"Connection error: {e}")
+            self.logger.log_json("ERROR", f"Connection error: {e}")
             return None
 
     def insert(self, table, data):
@@ -85,8 +82,7 @@ class PostgresConnection:
             sql.SQL(placeholders)
         )
         if self.execute_query(query, tuple(data.values())) is None:
-            if self.logger:
-                self.logger.log_json("ERROR", "Failed to insert data", {"table": table, "data": data})
+            self.logger.log_json("ERROR", "Failed to insert data", {"table": table, "data": data})
             return False
         return True
 
