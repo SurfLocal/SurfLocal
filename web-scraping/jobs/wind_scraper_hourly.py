@@ -17,12 +17,13 @@ DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_NAME = os.getenv("DB_NAME")
 
-def fetch_wind_data(latitude, longitude):
+def fetch_wind_data(latitude, longitude, logger):
     """Fetch current wind data from OpenWeather API and extract only numeric values.
 
     Args:
         latitude (float): Latitude of the location.
         longitude (float): Longitude of the location.
+        logger (Logger): The logger instance to log messages.
 
     Returns:
         dict: A dictionary containing wind speed, wind direction, and wind gust (if available).
@@ -43,13 +44,13 @@ def fetch_wind_data(latitude, longitude):
             "wind_gust": wind_gust if wind_gust is not None else None  # Insert NULL for missing gust data
         }
     except requests.exceptions.RequestException as e:
-        Logger.log_json("ERROR", "Error fetching wind data", {"error": str(e), "latitude": latitude, "longitude": longitude})
+        logger.log_json("ERROR", "Error fetching wind data", {"error": str(e), "latitude": latitude, "longitude": longitude})
         return None
     except KeyError as e:
-        Logger.log_json("ERROR", "Missing key in API response", {"error": str(e), "latitude": latitude, "longitude": longitude})
+        logger.log_json("ERROR", "Missing key in API response", {"error": str(e), "latitude": latitude, "longitude": longitude})
         return None
 
-def get_spot_info():
+def get_spot_info(logger):
     """Fetch spot info from the database.
 
     Returns:
@@ -59,17 +60,18 @@ def get_spot_info():
         spots = db_connection.select("reference.spot_info", "id, latitude, longitude")
     
     if not spots:
-        Logger.log_json("WARNING", "No spots found in the database")
+        logger.log_json("WARNING", "No spots found in the database")
         return []
 
     return spots
 
-def insert_wind_data(spot_id, wind_data):
+def insert_wind_data(spot_id, wind_data, logger):
     """Insert wind data into the database.
 
     Args:
         spot_id (int): The spot's unique identifier.
         wind_data (dict): A dictionary containing wind data to be inserted into the database.
+        logger (Logger): The logger instance to log messages.
     """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     data = {
@@ -82,22 +84,23 @@ def insert_wind_data(spot_id, wind_data):
 
     with PostgresConnection(DB_HOST, DB_USER, DB_PASSWORD, DB_NAME) as db_connection:
         if db_connection.insert("ingested.wind_data", data):
-            Logger.log_json("INFO", "Wind data inserted successfully", {"spot_id": spot_id})
+            logger.log_json("INFO", "Wind data inserted successfully", {"spot_id": spot_id})
         else:
-            Logger.log_json("ERROR", "Failed to insert wind data", {"spot_id": spot_id, "data": data})
+            logger.log_json("ERROR", "Failed to insert wind data", {"spot_id": spot_id, "data": data})
 
 if __name__ == "__main__":
-    spots = get_spot_info()
+    with Logger(job_name="wind-scraper-hourly") as logger:
+        spots = get_spot_info(logger)
 
-    if not spots:
-        Logger.log_json("WARNING", "No spot information to process wind data for")
+        if not spots:
+            logger.log_json("WARNING", "No spot information to process wind data for")
 
-    for spot in spots:
-        spot_id = spot[0]
-        latitude, longitude = spot[1], spot[2]
-        wind_data = fetch_wind_data(latitude, longitude)
+        for spot in spots:
+            spot_id = spot[0]
+            latitude, longitude = spot[1], spot[2]
+            wind_data = fetch_wind_data(latitude, longitude, logger)
 
-        if wind_data:
-            insert_wind_data(spot_id, wind_data)
-        else:
-            Logger.log_json("WARNING", "Failed to retrieve or insert wind data", {"spot_id": spot_id})
+            if wind_data:
+                insert_wind_data(spot_id, wind_data, logger)
+            else:
+                logger.log_json("WARNING", "Failed to retrieve or insert wind data", {"spot_id": spot_id})
