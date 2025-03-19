@@ -1,0 +1,16 @@
+minio:
+  storageClass: "standard"
+  persistence:
+    enabled: true
+    size: 10Gi
+    pvPath: "/mnt/minio-data"
+  replicaCount: 1
+  image:
+    repository: "minio/minio"
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  ports:
+    api: 9000
+    web: 9001
+    nodeApi: 31000
+    nodeWeb: 31001
