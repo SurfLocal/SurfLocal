@@ -1,0 +1,25 @@
+namespace: argo
+
+replicaCount:
+  controller: 1
+  server: 1
+
+image:
+  controller: "argoproj/workflow-controller:latest"
+
+resources:
+  controller:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+
+hourlyWorkflows:
+  enabled: true
+  schedules: "0 * * * *"
+  image: surflocally/web-scraper:prod-latest
+  jobs:
+    - swell-scraper-hourly
+    - wind-scraper-hourly

@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argo-controller
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount.controller }}
+  selector:
+    matchLabels:
+      app: argo-controller
+  template:
+    metadata:
+      labels:
+        app: argo-controller
+    spec:
+      serviceAccountName: argo
+      containers:
+        - name: argo-controller
+          image: {{ .Values.image.controller }}
+          env:
+            - name: LEADER_ELECTION_IDENTITY
+              value: "argo-controller"
+          command: ["workflow-controller"]
+          args: ["--configmap", "workflow-controller-configmap"]
+          resources: {{ toYaml .Values.resources.controller | nindent 12 }}
