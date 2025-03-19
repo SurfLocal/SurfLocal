@@ -1,0 +1,26 @@
+{{- if .Values.hourlyWorkflows.enabled }}
+{{- range .Values.hourlyWorkflows.jobs }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: {{ . }}
+  namespace: argo
+spec:
+  schedule: {{ $.Values.hourlyWorkflows.schedules | quote }}
+  concurrencyPolicy: "Replace"
+  startingDeadlineSeconds: 0
+  workflowSpec:
+    entrypoint: hourly-job
+    ttlStrategy:
+      secondsAfterCompletion: 3600 # Remove workflow pod after 1 hour
+    templates:
+      - name: hourly-job
+        script:
+          image: {{ $.Values.hourlyWorkflows.image | quote }}
+          imagePullPolicy: Always
+          command: [ "sh", "-c" ]
+          source: |
+            python /app/jobs/{{ . | replace "-scraper-hourly" "" }}_scraper_hourly.py 2>&1
+{{- end }}
+{{- end }}
