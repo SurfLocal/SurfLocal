@@ -1,0 +1,82 @@
+---
+- name: Download No-IP DUC package
+  become: true
+  get_url:
+    url: https://www.noip.com/download/linux/latest
+    dest: /tmp/noip-duc-latest.tar.gz
+    mode: '0644'
+
+- name: Find downloaded No-IP DUC tarball
+  find:
+    paths: /tmp
+    patterns: 'noip-duc*.tar.gz'
+    file_type: file
+  register: noip_tarball
+
+- name: Create No-IP DUC extraction directory
+  become: true
+  file:
+    path: "/usr/local/noip-duc"
+    state: directory
+    mode: '0755'
+
+- name: Extract No-IP DUC package
+  become: true
+  unarchive:
+    src: "{{ noip_tarball.files[0].path }}"
+    dest: "/usr/local/noip-duc/"
+    remote_src: yes
+
+- name: Find the No-IP DUC subdirectory with version
+  become: true
+  find:
+    paths: /usr/local/noip-duc
+    patterns: 'noip-duc_*'
+    file_type: directory
+  register: noip_duc_dir
+
+- name: Find the No-IP DUC .deb package
+  become: true
+  find:
+    paths: "{{ noip_duc_dir.files[0].path }}"
+    patterns: "noip-duc*_arm64.deb"
+    recurse: yes
+    file_type: file
+  register: noip_deb_package
+
+- name: Install No-IP DUC .deb package
+  become: true
+  apt:
+    deb: "{{ noip_deb_package.files[0].path }}"
+
+- name: Copy No-IP systemd service file
+  become: true
+  copy:
+    src: "{{ noip_duc_dir.files[0].path }}/debian/service"
+    dest: /etc/systemd/system/noip-duc.service
+    remote_src: yes
+    mode: '0644'
+
+- name: Create /etc/default/noip-duc file
+  become: true
+  template:
+    src: "noip-duc.j2"
+    dest: "/etc/default/noip-duc"
+    mode: '0644'
+
+- name: Reload systemd daemon
+  become: true
+  systemd:
+    daemon_reload: yes
+
+- name: Enable No-IP DUC service
+  become: true
+  systemd:
+    name: noip-duc
+    enabled: yes
+
+- name: Start No-IP DUC service
+  become: true
+  systemd:
+    name: noip-duc
+    state: started
