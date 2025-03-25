@@ -66,64 +66,25 @@ git clone https://github.com/SurfLocal/SurfLocal.git
 cd SurfLocal
 ```
 
-### Install the Raspberry Pi OS on microSD Cards
+### Getting the Cluster Up and Running
 
-1. **Install Raspberry Pi Imager and OS:**
+#### Networking Components
 
-   - Download the Raspberry Pi Imager from [https://www.raspberrypi.org/software/](https://www.raspberrypi.org/software/).
-   - Insert the SanDisk 32GB microSD card into your computer.
-   - Rename the microSD card to `boot`
-   - Open the Raspberry Pi Imager and choose the Raspberry Pi OS (64-bit).
-   - Select the SD card you inserted.
-   - Due to [recent changes](https://www.raspberrypi.com/news/raspberry-pi-bullseye-update-april-2022/), a username and password will have to be provided in order to enable SSH.
-   - Click "Next" and configure the host and username with corresponding password in the OS customization menu.
-   - When prompted that all existing data will be erased, click "Yes" that you would like to continue.
+The README in the `networking/` directory provides a detailed guide for setting up networking configurations on Raspberry Pi nodes. It begins with instructions for installing the Raspberry Pi OS and configuring hostnames. The first step involves using the Raspberry Pi Imager to install the OS, where users are prompted to configure a username and password for enabling SSH access. After the OS installation, the 'boot_pi.sh' script is executed to set a unique hostname for each Raspberry Pi and ensure SSH is enabled. This automates the pre-boot configuration, making it easier to prepare the devices for remote access.
 
-2. **Prepare the microSD Cards:**
+Next, the `init_host.sh` script is used once the Raspberry Pis are booted and connected to the local network. This script facilitates the setup of secure, passwordless SSH access by generating and transferring SSH keys, and disabling password authentication on the remote machine for enhanced security. The README emphasizes that each Raspberry Pi should be configured with a specific hostname and ensures that SSH access is set up correctly for future, seamless connections.
 
-   - Insert the microSD card into your computer.
-   - Mount the microSD card's boot partition to the directory `/Volumes/`:
-     ```bash
-     diskutil list  # Identify the disk identifier for the microSD card (e.g., /dev/disk2)
-     diskutil mountDisk /dev/diskX  # Replace /dev/diskX with the appropriate device identifier
-     ```
-   - Verify the mount:
-     ```bash
-     ls /Volumes
-     ```
+#### Ansible Provisioning
 
-3. **Run the `setup_node.sh` Script for Each Node:**
+The Ansible playbooks automate the installation and configuration of essential tools for setting up a containerized and Kubernetes-based environment. It begins by installing Docker on ARM64 systems, adding the necessary GPG key and repository, and ensuring that the user can run Docker commands without sudo. Helm, a package manager for Kubernetes, is also installed by downloading and executing its installation script.
 
-   - Add execution privileges for the script:
-     ```bash
-     chmod +x setup_node.sh
-     ```
+The playbooks then handle the installation and configuration of K3s, a lightweight Kubernetes distribution. The master node is initialized and the necessary join token is retrieved to add worker nodes to the cluster. Systemd services are enabled for both the K3s master and worker nodes to ensure they start automatically on boot. Additionally, Node Exporter is installed to collect system metrics for Prometheus monitoring, and the No-IP Dynamic Update Client (DUC) is configured for dynamic DNS management.
 
-   - For the master node:
-     ```bash
-     sudo ./setup_node.sh master
-     ```
+Finally, PostgreSQL is installed and configured to run with its data directory stored on a larger partition. The playbooks ensure PostgreSQL is set up to listen on both localhost and Kubernetes nodes and create a custom systemd service to manage its startup. These playbooks streamline the setup process by automating the installation and configuration of critical tools for development or production environments.
 
-   - For the worker nodes:
-     ```bash
-     sudo ./setup_node.sh worker1
-     sudo ./setup_node.sh worker2
-     sudo ./setup_node.sh worker3
-     ```
+#### Helm Deployments
 
-4. **Eject the microSD Card:**
-
-   ```bash
-   diskutil unmountDisk /dev/diskX  # Replace /dev/diskX with the appropriate device identifier
-   ```
-
-5. **Insert Each Prepared microSD Card into the Corresponding Raspberry Pi Device:**
-
-   - The first microSD card into the master node Raspberry Pi.
-   - The second microSD card into the worker1 node Raspberry Pi.
-   - The third microSD card into the worker2 node Raspberry Pi.
-   - The fourth microSD card into the worker3 node Raspberry Pi.
-   - Power on each Raspberry Pi and connect them to the network via Ethernet.
+Once the infrastructure for Kubernetes and PostgreSQL is set up, applications and workflows are managed and deployed to the cluster using Helm. Helm simplifies the deployment process by providing a consistent, repeatable way to manage Kubernetes applications. It is used to control Argo workflows for orchestrating and automating tasks, Grafana and Prometheus for monitoring and visualization, and MinIO for S3-compatible log storage. Additionally, Helm manages the deployment of the frontend application in the development environment.
 
 ### Install Dependencies
 
@@ -140,54 +101,7 @@ cd SurfLocal
    brew install ansible
    ```
 
-3. **Install `nmap`:**
-   For retrieving Raspberry Pi IP addresses:
+3. **Install `iproute2mac`:** The `ip` command (part of `iproute2mac`) is used to retrieve the router IP and perform other network-related tasks.
    ```bash
-   brew install nmap
+   brew install iproute2mac
    ```
-
-4. **Install `sshpass`:**
-   For authenticating via SSH with Ansible:
-   ```bash
-   brew install sshpass
-   ```
-
-5. **Initialize Ansible:**
-   Run the `init_ansible.sh` script on your computer:
-   ```bash
-   sudo ./init_ansible.sh
-   ```
-
-6. **Save the Raspberry Pi SSH Password:**
-   The `ansible/hosts` file will reference an environment variable for your SSH password so that you do not have to enter it each time you run an Ansible command. You can export this variable as follows:
-   ```bash
-   export ANSIBLE_SSH_PASS='your_ssh_password_here'
-   ```
-
-#### Verification
-
-Ping All Nodes:
-```bash
-cd ansible
-ansible all -m ping
-```
-
-Expected Output:
-```javascript
-master | SUCCESS => {
-   "changed": false,
-   "ping": "pong"
-}
-worker1 | SUCCESS => {
-   "changed": false,
-   "ping": "pong"
-}
-worker2 | SUCCESS => {
-   "changed": false,
-   "ping": "pong"
-}
-worker3 | SUCCESS => {
-   "changed": false,
-   "ping": "pong"
-}
-```
