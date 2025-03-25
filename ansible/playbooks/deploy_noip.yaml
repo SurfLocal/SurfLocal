@@ -1,0 +1,10 @@
+---
+- name: Install No-IP on Master and Postgres Nodes
+  hosts: 
+    # - master_node
+    - database_node
+  become: true
+  vars_files:
+    - ../vars/secrets.yaml
+  roles:
+    - noip

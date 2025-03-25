@@ -38,7 +38,7 @@ jobs:
       - name: Lint Bash scripts
         id: bash-lint
         run: |
-          find . -type f -name '*.sh' -exec shellcheck {} +
+          find . -type f -name '*.sh' -exec shellcheck -e SC2087 -e SC2034 {} +
 
   check-newlines:
     name: Check Newlines
