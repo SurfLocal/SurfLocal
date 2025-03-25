@@ -53,7 +53,7 @@ else
 fi
 
 # Prompt user to enable public DNS
-read -p "Do you want to enable public DNS for this host (surflocal<hostname>.ddns.net)? (y/n): " enable_dns
+read -r -p "Do you want to enable public DNS for this host (surflocal<hostname>.ddns.net)? (y/n): " enable_dns
 
 # If user chooses to enable DNS
 if [[ "$enable_dns" == "y" || "$enable_dns" == "Y" ]]; then

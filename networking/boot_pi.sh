@@ -33,7 +33,7 @@ DISK_IDENTIFIER="/dev/$DISK_IDENTIFIER"
 # Mount the disk
 echo "Disk with bootfs partition found: $DISK_IDENTIFIER"
 echo "Mounting the disk $DISK_IDENTIFIER..."
-diskutil mountDisk $DISK_IDENTIFIER
+diskutil mountDisk "$DISK_IDENTIFIER"
 
 # Check if the boot partition exists
 BOOT_DIR="/Volumes/bootfs"
@@ -54,6 +54,6 @@ echo "Hostname set to $HOST_NAME"
 
 # Unmount the disk
 echo -e "\nUnmounting the disk..."
-diskutil unmountDisk $DISK_IDENTIFIER
+diskutil unmountDisk "$DISK_IDENTIFIER"
 
 echo -e "\nPlease remove the microSD card and insert it into the Raspberry Pi."
