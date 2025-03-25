@@ -2,6 +2,7 @@ CREATE ROLE argo_read;
 
 -- Grant CONNECT privilege to the role on the database
 GRANT CONNECT ON DATABASE surf_analytics TO argo_read;
+\c surf_analytics;
 
 GRANT USAGE ON SCHEMA reference TO argo_read;
 

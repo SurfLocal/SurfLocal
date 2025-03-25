@@ -1,0 +1,1 @@
+CREATE USER platform_admin WITH LOGIN SUPERUSER PASSWORD '<redacted>';
