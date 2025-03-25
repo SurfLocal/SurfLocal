@@ -1,0 +1,160 @@
+#################################
+# BASIC INSTALLATION            #
+#################################
+
+- name: Install PostgreSQL
+  apt:
+    name: postgresql
+    state: present
+
+- name: Find PostgreSQL version directory
+  command: "ls /etc/postgresql/"
+  register: postgresql_version_dir
+  changed_when: false
+
+#################################
+# MOUNT LARGEST PARTITION       #
+#################################
+
+- name: Find the largest available drive
+  command: lsblk -b -o NAME,TYPE,SIZE,FSAVAIL,FSTYPE,MOUNTPOINT --json
+  register: lsblk_output
+  changed_when: false
+
+- name: Parse available partitions
+  set_fact:
+    largest_partition: "{{ (lsblk_output.stdout | from_json).blockdevices 
+                          | map(attribute='children') 
+                          | flatten 
+                          | selectattr('fsavail', 'defined') 
+                          | selectattr('fsavail', 'ne', 'null') 
+                          | sort(attribute='fsavail', reverse=True) 
+                          | first | default({}, true) }}"
+
+- name: Ensure mount directory exists
+  file:
+    path: /mnt/postgres_data
+    state: directory
+    mode: '0755'
+
+- name: Create a symlink for the device as /dev/database
+  file:
+    src: "/dev/{{ largest_partition.name }}"
+    dest: /dev/database
+    state: link
+    force: yes
+
+- name: Format the drive (if not already formatted)
+  command: "mkfs.ext4 -F /dev/{{ largest_partition.name }}"
+  when: largest_partition.fstype == ""
+
+- name: Mount the device at /mnt/postgres_data
+  mount:
+    path: /mnt/postgres_data
+    src: "/dev/{{ largest_partition.name }}"
+    fstype: ext4
+    state: mounted
+
+- name: Persist mount in /etc/fstab
+  lineinfile:
+    path: /etc/fstab
+    line: "/dev/database  /mnt/postgres_data  ext4  defaults,noatime  0 1"
+    state: present
+
+#################################
+# MOVE DATA TO NEW LOCATION     #
+#################################
+
+- name: Move existing PostgreSQL data directory to the new location
+  command: "mv /var/lib/postgresql /mnt/postgres_data/"
+  args:
+    creates: "/mnt/postgres_data/postgresql"
+
+- name: Update PostgreSQL data directory permissions
+  file:
+    path: /mnt/postgres_data/postgresql
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0700'
+    recurse: yes
+
+- name: Update PostgreSQL configuration to use new data directory
+  lineinfile:
+    path: /etc/postgresql/15/main/postgresql.conf
+    regexp: '^data_directory ='
+    line: "data_directory = '/mnt/postgres_data/postgresql/15/main'"
+    state: present
+
+#################################
+# ALLOWED CONNECTIONS           #
+#################################
+
+- name: Configure PostgreSQL to listen on localhost and Kubernetes nodes
+  lineinfile:
+    path: "/etc/postgresql/{{ postgresql_version_dir.stdout }}/main/postgresql.conf"
+    regexp: '^#listen_addresses'
+    line: "listen_addresses = 'localhost,master,worker1,worker2,worker3'"
+
+- name: Allow localhost connections in pg_hba.conf
+  lineinfile:
+    path: /etc/postgresql/{{ postgresql_version_dir.stdout }}/main/pg_hba.conf
+    line: "host    all             all             127.0.0.1/32        md5"
+    state: present
+
+- name: Allow Kubernetes nodes connections in pg_hba.conf
+  lineinfile:
+    path: /etc/postgresql/{{ postgresql_version_dir.stdout }}/main/pg_hba.conf
+    line: "host    all             all             {{ item }}        md5"
+    state: present
+  loop:
+    - "master"
+    - "worker1"
+    - "worker2"
+    - "worker3"
+
+#################################
+# SYSTEMD SERVICE               #
+#################################
+
+- name: Create custom PostgreSQL systemd service
+  copy:
+    dest: /etc/systemd/system/postgres.service
+    content: |
+      [Unit]
+      Description=PostgreSQL Database Server
+      After=network.target
+
+      [Service]
+      Type=forking
+      User=postgres
+      Group=postgres
+      ExecStart=/usr/lib/postgresql/{{ postgresql_version_dir.stdout }}/bin/pg_ctl start -D /etc/postgresql/{{ postgresql_version_dir.stdout }}/main -l /var/log/postgresql/postgresql.log
+      ExecStop=/usr/lib/postgresql/{{ postgresql_version_dir.stdout }}/bin/pg_ctl stop -D /etc/postgresql/{{ postgresql_version_dir.stdout }}/main
+      ExecReload=/usr/lib/postgresql/{{ postgresql_version_dir.stdout }}/bin/pg_ctl reload -D /etc/postgresql/{{ postgresql_version_dir.stdout }}/main
+      PIDFile=/var/run/postgresql/{{ postgresql_version_dir.stdout }}-main.pid
+      Restart=always
+      LimitNOFILE=4096
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Reload systemd to pick up new service
+  command: systemctl daemon-reload
+
+- name: Enable and start PostgreSQL service
+  systemd:
+    name: postgres
+    enabled: yes
+    state: started
+
+- name: Restart PostgreSQL service
+  systemd:
+    name: postgres
+    state: restarted
+    enabled: yes  # Ensures PostgreSQL starts on boot
+
+- name: Confirm PostgreSQL service is running
+  systemd:
+    name: postgres
+    state: started
