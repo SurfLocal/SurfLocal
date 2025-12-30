@@ -3,6 +3,7 @@
 
 # Ignore Ansible vault passwords
 vault_password_file
+secrets.yaml.template
 
 # Ignore Ansible retry files
 .retry

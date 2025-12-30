@@ -8,7 +8,7 @@
  * Modifications:
  *   This table will not have any records inserted or removed manually.
  */
-CREATE TABLE reference.spot_buoy_link (
+CREATE TABLE IF NOT EXISTS reference.spot_buoy_link (
     spot_id INT,
     buoy_id INT,
     PRIMARY KEY (spot_id, buoy_id),
@@ -16,6 +16,7 @@ CREATE TABLE reference.spot_buoy_link (
     FOREIGN KEY (buoy_id) REFERENCES reference.buoy_info(id)
 );
 
+-- Insert seed data (idempotent - ON CONFLICT DO NOTHING)
 INSERT INTO reference.spot_buoy_link (spot_id, buoy_id)
 VALUES
 -- Del Mar Nearshore and Torrey Pines Outer linked with both Del Mar spots
@@ -34,4 +35,5 @@ VALUES
 (2, 46258),  -- Ocean Beach with Mission Bay West
 (3, 46232),  -- Pacific Beach Drive with Point Loma South
 (1, 46232),  -- Sunset Cliffs with Point Loma South
-(2, 46232);  -- Ocean Beach with Point Loma South
+(2, 46232)   -- Ocean Beach with Point Loma South
+ON CONFLICT (spot_id, buoy_id) DO NOTHING;

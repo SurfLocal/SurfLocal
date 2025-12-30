@@ -1,0 +1,6 @@
+---
+- name: Common dependencies
+  hosts: all
+  become: true
+  roles:
+    - common

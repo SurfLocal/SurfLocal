@@ -1,8 +1,14 @@
-CREATE ROLE argo_write;
+-- Create role if it doesn't exist (idempotent)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'argo_write') THEN
+        CREATE ROLE argo_write;
+    END IF;
+END
+$$;
 
 -- Grant CONNECT privilege to the role on the database
 GRANT CONNECT ON DATABASE surf_analytics TO argo_write;
-\c surf_analytics;
 
 GRANT USAGE ON SCHEMA ingested TO argo_write;
 

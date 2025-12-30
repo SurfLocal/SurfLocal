@@ -9,7 +9,7 @@
  * Modifications:
  *   The table is modified by Argo for hourly data inserts.
  */
-CREATE TABLE ingested.wind_data (
+CREATE TABLE IF NOT EXISTS ingested.wind_data (
     timestamp TIMESTAMPTZ NOT NULL,
     spot_id INT NOT NULL,
     wind_speed FLOAT NOT NULL,

@@ -1,0 +1,24 @@
+---
+- name: Common dependencies
+  import_playbook: deploy_common.yaml
+
+- name: Cluster dependencies
+  import_playbook: deploy_cluster.yaml
+
+- name: Deploy Docker
+  import_playbook: deploy_docker.yaml
+
+- name: Deploy Kubernetes
+  import_playbook: deploy_kubernetes.yaml
+
+- name: Deploy Helm
+  import_playbook: deploy_helm.yaml
+
+- name: Deploy Node Exporter
+  import_playbook: deploy_node_exporter.yaml
+
+- name: Deploy No-IP
+  import_playbook: deploy_noip.yaml
+
+- name: Deploy Postgres
+  import_playbook: deploy_postgres.yaml

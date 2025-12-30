@@ -1,0 +1,120 @@
+---
+- name: Install locales package
+  apt:
+    name: locales
+    state: present
+    update_cache: yes
+
+- name: Uncomment en_US.UTF-8 in /etc/locale.gen
+  lineinfile:
+    path: /etc/locale.gen
+    regexp: '^#\s*en_US.UTF-8'
+    line: 'en_US.UTF-8 UTF-8'
+    
+- name: Regenerate locales
+  command: locale-gen
+  
+- name: Set LANG and LC_ALL environment variables in /etc/environment
+  lineinfile:
+    path: /etc/environment
+    line: "{{ item }}"
+    create: yes
+  loop:
+    - 'LANG=en_US.UTF-8'
+    - 'LC_ALL=en_US.UTF-8'
+    - 'LC_CTYPE=en_US.UTF-8'
+    - 'LANGUAGE=en_US:en'
+
+- name: Update system locale
+  command: update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 LC_CTYPE=en_US.UTF-8 LANGUAGE=en_US:en
+
+- name: Set default locale in /etc/default/locale
+  copy:
+    dest: /etc/default/locale
+    content: |
+      LANG=en_US.UTF-8
+      LC_ALL=en_US.UTF-8
+      LC_CTYPE=en_US.UTF-8
+      LANGUAGE=en_US:en
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Disable cloud-init locale warning
+  file:
+    path: /var/lib/cloud/instance/locale-check.skip
+    state: touch
+    owner: root
+    group: root
+    mode: '0644'
+  ignore_errors: yes
+
+- name: Update package lists
+  apt:
+    update_cache: yes
+
+- name: Perform a non-interactive full upgrade
+  apt:
+    upgrade: dist
+    dpkg_options: 'force-confold'
+    autoremove: yes
+    autoclean: yes
+
+- name: Install common dependencies
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - curl
+    - wget
+    - vim
+    - htop
+    - net-tools
+    - apt-transport-https
+    - ca-certificates
+
+- name: Set timezone to UTC
+  timezone:
+    name: UTC
+
+- name: Create dynamic MOTD script with ANSI color codes
+  copy:
+    dest: /etc/update-motd.d/99-raspberry-motd
+    mode: '0755'
+    owner: root
+    group: root
+    content: |
+      #!/bin/bash
+      echo -e "\033[32m"                                                                    # Set green color
+      echo "       .~~.   .~~."
+      echo -e "      '. \ ' ' / .'   \033[31m"                                              # Set red color
+      echo -e "       .~ .~~~..~.    \033[0m                  _                          _   \033[31m"
+      echo -e "      : .~.'~'.~. :   \033[0m  ___ ___ ___ ___| |_ ___ ___ ___ _ _    ___|_|  \033[31m"
+      echo -e "     ~ (   ) (   ) ~  \033[0m |  _| .'|_ -| . | . | -_|  _|  _| | |  | . | |  \033[31m"
+      echo -e "    ( : '~'.~.'~' : ) \033[0m |_| |__,|___|  _|___|___|_| |_| |_  |  |  _|_|  \033[31m"
+      echo -e "     ~ .~ (   ) ~. ~  \033[0m             |_|                 |___|  |_|      \033[31m"
+      echo "      (  : '~' :  )"
+      echo "       '~ .~~~. ~'"
+      echo "           '~'"
+      echo -e "\033[0m"                                                                     # Reset color
+
+- name: Remove default MOTD scripts
+  file:
+    path: /etc/update-motd.d/{{ item }}
+    state: absent
+  loop:
+    - 10-uname
+    - 50-motd-news
+
+- name: Remove /etc/motd symlink
+  file:
+    path: /etc/motd
+    state: absent
+
+- name: Force MOTD refresh
+  command: run-parts --lsbsysinit /etc/update-motd.d/
+
+- name: Restart SSH service
+  systemd:
+    name: ssh
+    state: restarted

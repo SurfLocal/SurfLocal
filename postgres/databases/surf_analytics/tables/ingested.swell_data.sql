@@ -11,7 +11,7 @@
  * Modifications:
  *   The table is only modified by Argo for hourly data inserts.
  */
-CREATE TABLE ingested.swell_data (
+CREATE TABLE IF NOT EXISTS ingested.swell_data (
     timestamp TIMESTAMPTZ NOT NULL,
     buoy_id INT NOT NULL,
     wave_height FLOAT DEFAULT NULL,

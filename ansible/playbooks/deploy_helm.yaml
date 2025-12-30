@@ -1,6 +1,6 @@
 ---
 - name: Install Helm
   hosts: master_node
-  become: yes
+  become: true
   roles:
     - helm
