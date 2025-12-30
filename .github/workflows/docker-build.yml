@@ -66,7 +66,7 @@ jobs:
                        --build-arg MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }} \
                        -t ${IMAGE_NAME}:${IMAGE_TAG} \
                        -t ${IMAGE_NAME}:${TAG_PREFIX}-latest \
-                       -f web-scraping/web_scraper.Dockerfile .
+                       -f web-scraping/web_scraper.Dockerfile . --push
 
       # Step 5: Log in to Docker Hub (if images are built)
       - name: Log in to Docker Hub
@@ -75,8 +75,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Step 6: Push Docker images to Docker Hub
-      - name: Push Docker images to Docker Hub
+      # Step 6: Images already pushed via buildx build --push
+      - name: Images pushed successfully
         run: |
-          docker push surflocally/web-scraper:${{ env.IMAGE_TAG }}
-          docker push surflocally/web-scraper:${{ env.TAG_PREFIX }}-latest
+          echo "Images ${IMAGE_NAME}:${IMAGE_TAG} and ${IMAGE_NAME}:${TAG_PREFIX}-latest pushed for both amd64 and arm64"

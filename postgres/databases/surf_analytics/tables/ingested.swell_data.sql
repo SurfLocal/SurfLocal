@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS ingested.swell_data (
     wind_wave_direction VARCHAR(255) DEFAULT NULL,
     wave_steepness VARCHAR(255) DEFAULT NULL,
     average_wave_period FLOAT DEFAULT NULL,
+    tide FLOAT DEFAULT NULL,
     PRIMARY KEY (timestamp, buoy_id),
     FOREIGN KEY (buoy_id) REFERENCES reference.buoy_info(id) ON DELETE CASCADE
 );

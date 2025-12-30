@@ -60,3 +60,98 @@ All sensitive information, such as database credentials and API keys, is securel
 ## Database Configuration
 
 The PostgreSQL database used for storing scraped data is hosted on a Raspberry Pi. The workflow passes the appropriate database configuration as build arguments, ensuring seamless integration during deployment.
+
+## Testing
+
+Comprehensive unit and integration tests are provided for both scraper jobs to ensure reliability and correctness.
+
+### Test Structure
+
+```
+web-scraping/jobs/tests/
+├── __init__.py
+├── conftest.py                    # Shared fixtures and configuration
+├── test_swell_scraper_unit.py     # Unit tests for swell scraper
+├── test_wind_scraper_unit.py      # Unit tests for wind scraper
+└── test_integration.py            # Integration tests for both scrapers
+```
+
+### Running Tests
+
+#### Install Test Dependencies
+
+```bash
+cd web-scraping
+pip install -r requirements-test.txt
+```
+
+#### Run All Tests
+
+```bash
+pytest
+```
+
+#### Run Specific Test Categories
+
+```bash
+# Run only unit tests
+pytest -m unit
+
+# Run only integration tests
+pytest -m integration
+
+# Run tests for a specific scraper
+pytest jobs/tests/test_swell_scraper_unit.py
+pytest jobs/tests/test_wind_scraper_unit.py
+```
+
+#### Run with Coverage Report
+
+```bash
+# Terminal coverage report
+pytest --cov=jobs --cov-report=term-missing
+
+# HTML coverage report (opens in browser)
+pytest --cov=jobs --cov-report=html
+open htmlcov/index.html
+```
+
+#### Run Verbose Output
+
+```bash
+pytest -v
+```
+
+### Test Coverage
+
+The test suite includes:
+
+**Unit Tests:**
+- `extract_number()` utility function
+- `fetch_swell_data()` - data extraction from NOAA buoys
+- `fetch_wind_data()` - data extraction from OpenWeather API
+- `insert_swell_data()` - database insertion for swell data
+- `insert_wind_data()` - database insertion for wind data
+- `get_buoy_ids()` - buoy ID retrieval from database
+- `get_spot_info()` - spot information retrieval from database
+
+**Integration Tests:**
+- Full swell scraper workflow (fetch → parse → insert)
+- Full wind scraper workflow (fetch → parse → insert)
+- Error handling and partial failures
+- Database connection management
+- API failure scenarios
+
+### Writing New Tests
+
+When adding new functionality:
+
+1. **Add unit tests** for individual functions in the appropriate `test_*_unit.py` file
+2. **Add integration tests** in `test_integration.py` for end-to-end workflows
+3. **Use fixtures** from `conftest.py` for common test setup
+4. **Mock external dependencies** (HTTP requests, database connections)
+5. **Follow naming conventions**: `test_<function_name>_<scenario>`
+
+### Continuous Integration
+
+Tests are automatically run in the CI/CD pipeline before Docker images are built and deployed. All tests must pass before changes are merged to `main` or `qa` branches.

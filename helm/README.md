@@ -116,7 +116,7 @@ Secret Key: fidelio!
 
 ### Prometheus
 
-Prometheus is accessible only within the cluster (ClusterIP service). Access will be provided through Grafana in a future deployment.
+Prometheus is accessible only within the cluster (ClusterIP service). Access to analytics will be provided through Grafana in a future deployment.
 
 For internal cluster access:
 ```

@@ -95,5 +95,3 @@ up{instance="worker2:9100", job="raspberry-pi-nodes"} 1
 up{instance="worker3:9100", job="raspberry-pi-nodes"} 1
 up{instance="localhost:9090", job="prometheus"} 1
 ```
-
-**Note**: If you previously had IP-based targets, those metrics will remain in Prometheus for the default 15-day retention period. The new hostname-based targets will start accumulating immediately alongside the old ones.
