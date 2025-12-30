@@ -1,0 +1,26 @@
+---
+# Configure CoreDNS with custom DNS entries for the cluster
+# This adds hostname mappings for services running outside Kubernetes
+
+- name: Create CoreDNS patch file
+  template:
+    src: coredns-configmap.yaml.j2
+    dest: /tmp/coredns-configmap.yaml
+
+- name: Apply CoreDNS ConfigMap
+  shell: kubectl apply -f /tmp/coredns-configmap.yaml
+  register: coredns_apply
+  changed_when: "'configured' in coredns_apply.stdout or 'created' in coredns_apply.stdout"
+
+- name: Restart CoreDNS pods to apply changes
+  shell: kubectl rollout restart deployment coredns -n kube-system
+  when: coredns_apply.changed
+
+- name: Wait for CoreDNS to be ready
+  shell: kubectl rollout status deployment coredns -n kube-system --timeout=60s
+  when: coredns_apply.changed
+
+- name: Clean up temporary file
+  file:
+    path: /tmp/coredns-configmap.yaml
+    state: absent

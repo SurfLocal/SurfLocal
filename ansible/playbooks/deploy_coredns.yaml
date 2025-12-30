@@ -1,0 +1,12 @@
+---
+# First gather facts from all hosts to populate hostvars
+- name: Gather facts from all hosts
+  hosts: all
+  gather_facts: true
+
+- name: Configure CoreDNS with custom DNS entries
+  hosts: master
+  become: false
+  gather_facts: false
+  roles:
+    - coredns
