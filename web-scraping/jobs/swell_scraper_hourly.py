@@ -65,6 +65,13 @@ def fetch_swell_data(buoy_id, logger):
         logger.log_json("WARNING", f"Detailed wave summary table not found for buoy ID {buoy_id}", {"buoy_id": buoy_id})
         return None
 
+    # Search for the main data table (contains tide data)
+    main_data_table = None
+    for table in tables:
+        if "TIDE" in table.text:
+            main_data_table = table
+            break
+
     # Wrap in StringIO to avoid pandas warning
     html_content = str(detailed_table)
     df = pd.read_html(StringIO(html_content))[0]
@@ -83,6 +90,21 @@ def fetch_swell_data(buoy_id, logger):
         logger.log_json("ERROR", f"Failure to extract data from table for buoy ID {buoy_id}", {"buoy_id": buoy_id})
         return None
 
+    # Extract tide data from main data table
+    tide = None
+    if main_data_table:
+        try:
+            tide_html = str(main_data_table)
+            tide_df = pd.read_html(StringIO(tide_html))[0]
+            # Get the most recent tide reading (first data row, last column)
+            if len(tide_df) > 1 and len(tide_df.columns) > 0:
+                tide_value = str(tide_df.iloc[1, -1])  # First data row, last column
+                if tide_value and tide_value != '-':
+                    # Remove '+' sign and convert to float
+                    tide = float(tide_value.replace('+', ''))
+        except (IndexError, ValueError, AttributeError) as e:
+            logger.log_json("WARNING", f"Could not extract tide data for buoy ID {buoy_id}", {"buoy_id": buoy_id, "error": str(e)})
+
     return {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "buoy_id": buoy_id,
@@ -94,7 +116,8 @@ def fetch_swell_data(buoy_id, logger):
         "wind_wave_period": wind_wave_period,
         "wind_wave_direction": wind_wave_direction,
         "wave_steepness": wave_steepness,
-        "average_wave_period": average_wave_period
+        "average_wave_period": average_wave_period,
+        "tide": tide
     }
 
 def insert_swell_data(swell_data, logger):
@@ -117,7 +140,8 @@ def insert_swell_data(swell_data, logger):
             "wind_wave_period": swell_data['wind_wave_period'],
             "wind_wave_direction": swell_data['wind_wave_direction'],
             "wave_steepness": swell_data['wave_steepness'],
-            "average_wave_period": swell_data['average_wave_period']
+            "average_wave_period": swell_data['average_wave_period'],
+            "tide": swell_data['tide']
         }):
             logger.log_json("INFO", "Swell data inserted successfully", {"buoy_id": swell_data['buoy_id']})
         else:

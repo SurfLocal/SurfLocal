@@ -31,3 +31,11 @@ ansible/hosts
 # Ignore virtual environment directory (if using)
 venv/
 env/
+
+# Ignore test artifacts and coverage reports
+web-scraping/.coverage
+web-scraping/htmlcov/
+web-scraping/.pytest_cache/
+*.pyc
+*.pyo
+__pycache__/
