@@ -1,0 +1,8 @@
+---
+- name: Install PostgreSQL Exporter on database node
+  hosts: database_node
+  become: true
+  vars_files:
+    - ../vars/secrets.yaml
+  roles:
+    - postgres_exporter

@@ -1,0 +1,86 @@
+---
+# Install and configure PostgreSQL Exporter for Prometheus metrics
+
+- name: Check system architecture
+  command: uname -m
+  register: arch
+  changed_when: false
+
+- name: Set architecture variable
+  set_fact:
+    exporter_arch: "{{ 'arm64' if arch.stdout == 'aarch64' else 'armv7' }}"
+
+- name: Download PostgreSQL Exporter
+  get_url:
+    url: "https://github.com/prometheus-community/postgres_exporter/releases/download/v0.15.0/postgres_exporter-0.15.0.linux-{{ exporter_arch }}.tar.gz"
+    dest: "/tmp/postgres_exporter-0.15.0.linux-{{ exporter_arch }}.tar.gz"
+
+- name: Create extraction directory
+  file:
+    path: /tmp/postgres_exporter
+    state: directory
+
+- name: Extract PostgreSQL Exporter
+  unarchive:
+    src: "/tmp/postgres_exporter-0.15.0.linux-{{ exporter_arch }}.tar.gz"
+    dest: /tmp/postgres_exporter
+    remote_src: yes
+    extra_opts: [--strip-components=1]
+
+- name: Move PostgreSQL Exporter binary to /usr/local/bin
+  copy:
+    src: /tmp/postgres_exporter/postgres_exporter
+    dest: /usr/local/bin/postgres_exporter
+    mode: '0755'
+    remote_src: yes
+
+- name: Create postgres_exporter user
+  user:
+    name: postgres_exporter
+    system: yes
+    shell: /usr/sbin/nologin
+    create_home: no
+
+- name: Create environment file for PostgreSQL Exporter
+  template:
+    src: postgres_exporter.env.j2
+    dest: /etc/default/postgres_exporter
+    mode: '0600'
+    owner: postgres_exporter
+
+- name: Create systemd service file for PostgreSQL Exporter
+  copy:
+    dest: /etc/systemd/system/postgres_exporter.service
+    content: |
+      [Unit]
+      Description=PostgreSQL Exporter
+      Wants=network-online.target
+      After=network-online.target postgresql.service
+
+      [Service]
+      User=postgres_exporter
+      EnvironmentFile=/etc/default/postgres_exporter
+      ExecStart=/usr/local/bin/postgres_exporter
+      Restart=always
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: '0644'
+
+- name: Reload systemd to recognize PostgreSQL Exporter service
+  systemd:
+    daemon_reload: yes
+
+- name: Start PostgreSQL Exporter service
+  systemd:
+    name: postgres_exporter
+    state: started
+    enabled: yes
+
+- name: Clean up temporary files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/tmp/postgres_exporter-0.15.0.linux-{{ exporter_arch }}.tar.gz"
+    - /tmp/postgres_exporter

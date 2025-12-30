@@ -1,17 +1,30 @@
 ---
+- name: Check system architecture
+  command: uname -m
+  register: arch
+  changed_when: false
+
+- name: Set architecture variable
+  set_fact:
+    node_exporter_arch: "{{ 'arm64' if arch.stdout == 'aarch64' else 'armv7' }}"
+
 - name: Download Node Exporter
   get_url:
-    url: https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-armv7.tar.gz
-    dest: /tmp/node_exporter-1.3.1.linux-armv7.tar.gz
+    url: "https://github.com/prometheus/node_exporter/releases/download/v1.8.2/node_exporter-1.8.2.linux-{{ node_exporter_arch }}.tar.gz"
+    dest: "/tmp/node_exporter-1.8.2.linux-{{ node_exporter_arch }}.tar.gz"
 
 - name: Extract Node Exporter
   unarchive:
-    src: /tmp/node_exporter-1.3.1.linux-armv7.tar.gz
+    src: "/tmp/node_exporter-1.8.2.linux-{{ node_exporter_arch }}.tar.gz"
     dest: /tmp/
     remote_src: yes
 
 - name: Move Node Exporter binary to /usr/local/bin
-  command: mv /tmp/node_exporter-1.3.1.linux-armv7/node_exporter /usr/local/bin/node_exporter
+  copy:
+    src: "/tmp/node_exporter-1.8.2.linux-{{ node_exporter_arch }}/node_exporter"
+    dest: /usr/local/bin/node_exporter
+    mode: '0755'
+    remote_src: yes
 
 - name: Set permissions for Node Exporter binary
   file:

@@ -1,0 +1,14 @@
+---
+# PostgreSQL Exporter defaults
+# These should be overridden in the playbook or secrets file
+
+postgres_exporter_user: "postgres"
+postgres_exporter_password: "{{ platform_admin_password }}"
+
+# Databases to monitor (first one is primary, others are additional)
+# postgres_exporter_databases:
+#   - "surf_analytics"
+#   - "postgres"
+#   - "template1"
+postgres_exporter_databases:
+  - "surf_analytics"
