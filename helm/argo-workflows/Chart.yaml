@@ -1,9 +1,24 @@
 apiVersion: v2
 name: argo-workflows
-description: A Helm chart for deploying Argo Workflows
+description: Workflow engine for orchestrating parallel jobs on Kubernetes
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "v3.5.3"
+keywords:
+  - workflows
+  - argo
+  - orchestration
+  - cicd
+  - automation
+maintainers:
+  - name: SurfLocal Team
+home: https://argoproj.github.io/argo-workflows/
+sources:
+  - https://github.com/argoproj/argo-workflows
+dependencies:
+  - name: minio
+    version: "*"
+    repository: "file://./charts/minio"
+    condition: minio.enabled
 
-# Exclude CRDs from Helm installation
-# CRDs should be installed separately with kubectl apply -k ./crds/
+# Note: CRDs should be installed separately with kubectl apply -k ./crds/

@@ -1,97 +1,281 @@
 # Prometheus Helm Chart
 
-This chart deploys Prometheus for monitoring the Raspberry Pi cluster.
+Prometheus monitoring system and time series database for the SurfLocal Kubernetes cluster.
+
+## Overview
+
+This chart deploys Prometheus with:
+- Metrics collection from all cluster nodes (Node Exporter)
+- PostgreSQL database monitoring (PostgreSQL Exporter)
+- Configurable scrape targets
+- Persistent storage for metrics
+- 15-day retention policy
 
 ## Prerequisites
 
-1. **Kubernetes cluster running** (k3s on Raspberry Pi cluster)
-2. **Node Exporter installed** on all nodes (deployed via Ansible)
-3. **kubectl configured** with cluster access
+1. **Kubernetes cluster running** (k3s)
+2. **Helm 3.x installed**
+3. **Node Exporter running** on all nodes
+4. **PostgreSQL Exporter running** on postgres host
+5. **CoreDNS configured** for hostname resolution
 
-### Install Node Exporter
-
-Before deploying Prometheus, ensure Node Exporter is running on all nodes:
+### Install Exporters via Ansible
 
 ```bash
 cd ../../ansible
+
+# Deploy Node Exporter to all nodes
 ansible-playbook playbooks/deploy_node_exporter.yaml
+
+# Deploy PostgreSQL Exporter to postgres host
+ansible-playbook playbooks/deploy_postgres_exporter.yaml
 ```
 
 ## Installation
 
-The chart automatically creates the `monitoring` namespace using Helm pre-install hooks:
+### Quick Start
 
 ```bash
-helm install prometheus .
+cd helm/prometheus
+helm upgrade --install prometheus . -n monitoring
 ```
 
-This deploys:
-- Prometheus server
-- ConfigMap with scrape targets for all Raspberry Pi nodes
-- PersistentVolume for metrics storage
-- Service for accessing Prometheus UI
+The chart automatically:
+- Creates the `monitoring` namespace (via Helm hook)
+- Deploys Prometheus server with configured scrape targets
+- Creates PersistentVolume and PersistentVolumeClaim
+- Configures service for cluster access
 
-## Verify the Deployment
+### Custom Installation
 
-### Check Pod Status
+Override values during installation:
 
-Check the status of the Prometheus pods to ensure they are running:
 ```bash
-kubectl get pods -n monitoring -l app=prometheus
+helm upgrade --install prometheus . -n monitoring \
+  --set resources.limits.memory=4Gi \
+  --set retention.time=30d
 ```
 
-Expected Output:
-```bash
-NAME                                     READY   STATUS    RESTARTS   AGE
-prometheus-<unique-id>                   2/2     Running   0          2m
+## Configuration
+
+### Scrape Targets
+
+Configured in `values.yaml`:
+
+```yaml
+config:
+  scrapeConfigs:
+    - jobName: prometheus
+      targets:
+        - localhost:9090
+    
+    - jobName: raspberry-pi-nodes
+      targets:
+        - master:9100
+        - worker1:9100
+        - worker2:9100
+        - worker3:9100
+        - postgres:9100
+    
+    - jobName: postgres
+      targets:
+        - postgres:9187
 ```
 
-### Find the Prometheus Service
+### Storage Configuration
 
-To find the service that you need to port forward, run the following command:
+```yaml
+persistence:
+  enabled: true
+  size: 10Gi
+  existingClaim: "prometheus-pvc"
+  persistentVolume:
+    enabled: true
+    hostPath: "/mnt/ssd/prometheus-data"
+```
+
+### Resource Limits
+
+```yaml
+resources:
+  limits:
+    cpu: "1000m"
+    memory: "2Gi"
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+```
+
+## Verification
+
+### Check Deployment Status
+
 ```bash
+# Check pods
+kubectl get pods -n monitoring
+
+# Check services
 kubectl get svc -n monitoring
+
+# Check PV/PVC
+kubectl get pv,pvc -n monitoring
 ```
 
-Look for the Prometheus service. The expected output should include something like:
+### Verify Scrape Targets
+
 ```bash
-NAME                    TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
-prometheus              ClusterIP   10.43.200.100    <none>        9090/TCP   2m
+# Port-forward to Prometheus
+kubectl port-forward -n monitoring svc/prometheus 9090:9090
+
+# Check targets via API
+curl http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | {instance: .labels.instance, health: .health}'
 ```
 
 ## Accessing Prometheus
 
-Prometheus uses a ClusterIP service and is only accessible within the Kubernetes cluster. External access will be provided through Grafana in a future deployment.
+### Port-Forward (Recommended)
+
+```bash
+kubectl port-forward -n monitoring svc/prometheus 9090:9090
+```
+
+Then visit: http://localhost:9090
 
 ### Internal Cluster Access
 
 From within the cluster:
 ```
-prometheus.monitoring.svc.cluster.local:9090
+http://prometheus.monitoring.svc.cluster.local:9090
 ```
 
-### Port Forward (For Development/Testing)
+## Usage Examples
 
-To access temporarily from your local machine:
+### Query All Targets Status
 
-```bash
-kubectl port-forward svc/prometheus 9090:9090 -n monitoring
+```promql
+up
 ```
 
-Then navigate to `http://localhost:9090`
-
-#### Run the `up` Query
-
-To verify that Prometheus is scraping the metrics from all nodes, run the `up` query:
-1. Click on the "Graph" tab.
-2. In the query input box, type `up` and click "Execute".
-3. You should see results for all your nodes. If everything is configured correctly, you should see entries for each of your Raspberry Pi nodes and the Prometheus server itself.
-
-Expected Output:
-```plaintext
+Expected output:
+```
+up{instance="postgres:9187", job="postgres"} 1
+up{instance="postgres:9100", job="raspberry-pi-nodes"} 1
 up{instance="master:9100", job="raspberry-pi-nodes"} 1
 up{instance="worker1:9100", job="raspberry-pi-nodes"} 1
 up{instance="worker2:9100", job="raspberry-pi-nodes"} 1
 up{instance="worker3:9100", job="raspberry-pi-nodes"} 1
 up{instance="localhost:9090", job="prometheus"} 1
 ```
+
+### Node CPU Usage
+
+```promql
+100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+```
+
+### PostgreSQL Connections
+
+```promql
+pg_stat_database_numbackends{datname="surf_analytics"}
+```
+
+### Memory Usage
+
+```promql
+node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100
+```
+
+## Upgrading
+
+### Update Configuration
+
+Modify `values.yaml` and upgrade:
+
+```bash
+helm upgrade prometheus . -n monitoring
+```
+
+### Add New Scrape Target
+
+Edit `values.yaml`:
+
+```yaml
+config:
+  scrapeConfigs:
+    - jobName: my-app
+      targets:
+        - my-app:8080
+```
+
+Then upgrade:
+
+```bash
+helm upgrade prometheus . -n monitoring
+```
+
+## Troubleshooting
+
+### Targets Not Showing Up
+
+1. Check CoreDNS is resolving hostnames:
+   ```bash
+   kubectl exec -n monitoring deployment/prometheus -- nslookup postgres
+   ```
+
+2. Verify exporters are running:
+   ```bash
+   ssh postgres 'systemctl status node_exporter postgres_exporter'
+   ```
+
+3. Check Prometheus logs:
+   ```bash
+   kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus
+   ```
+
+### PVC Pending
+
+If using existing PVC, ensure it exists:
+```bash
+kubectl get pvc -n monitoring
+```
+
+### High Memory Usage
+
+Increase resource limits:
+```yaml
+resources:
+  limits:
+    memory: "4Gi"
+```
+
+## Uninstalling
+
+```bash
+helm uninstall prometheus -n monitoring
+```
+
+Note: PVs are not automatically deleted. To remove:
+```bash
+kubectl delete pv prometheus-pv
+```
+
+## Values Reference
+
+See [STANDARDS.md](../STANDARDS.md) for complete values structure.
+
+### Key Configuration Options
+
+| Parameter | Description | Default |
+|-----------|-------------|----------|
+| `metadata.namespace` | Namespace for deployment | `monitoring` |
+| `deployment.replicaCount` | Number of replicas | `1` |
+| `resources.limits.memory` | Memory limit | `2Gi` |
+| `retention.time` | Metrics retention period | `15d` |
+| `persistence.size` | Storage size | `10Gi` |
+| `config.scrapeInterval` | Scrape interval | `15s` |
+
+## Related Documentation
+
+- [Helm Chart Standards](../STANDARDS.md)
+- [Prometheus Documentation](https://prometheus.io/docs/)
+- [PromQL Query Language](https://prometheus.io/docs/prometheus/latest/querying/basics/)

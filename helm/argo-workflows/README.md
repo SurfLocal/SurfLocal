@@ -1,16 +1,27 @@
 # Argo Workflows Helm Chart
 
-This chart deploys Argo Workflows with MinIO for artifact and log storage.
+Workflow orchestration engine for scheduling and executing parallel jobs on Kubernetes.
+
+## Overview
+
+This chart deploys:
+- Argo Workflows controller for workflow orchestration
+- MinIO for S3-compatible object storage
+- Scheduled CronWorkflows for hourly data scraping
+- Automated MinIO bucket creation
+- RBAC resources with service accounts
 
 ## Prerequisites
 
-1. **Kubernetes cluster running** (k3s on Raspberry Pi cluster)
-2. **SSD mounted on master node** at `/mnt/ssd` for MinIO storage
-3. **kubectl configured** with cluster access
+1. **Kubernetes cluster running** (k3s)
+2. **Helm 3.x installed**
+3. **SSD mounted on master node** at `/mnt/ssd`
+4. **Argo Workflows CRDs installed**
+5. **Web scraper Docker image** available
 
 ### Mount SSD Storage
 
-Before deploying, ensure the SSD is mounted:
+Deploy via Ansible:
 
 ```bash
 cd ../../ansible
@@ -19,59 +30,323 @@ ansible-playbook playbooks/deploy_s3_storage.yaml
 
 ## Installation
 
-### Step 1: Apply CRDs
+### Step 1: Install CRDs
 
-CRDs must be installed separately before deploying the Helm chart:
+CRDs must be installed before the Helm chart:
+
+```bash
+cd helm/argo-workflows
+kubectl apply -k ./crds/
+```
+
+Verify:
+
+```bash
+kubectl get crds | grep argoproj.io
+```
+
+Expected output:
+```
+cronworkflows.argoproj.io
+workflows.argoproj.io
+workflowtemplates.argoproj.io
+clusterworkflowtemplates.argoproj.io
+```
+
+### Step 2: Deploy Chart
+
+```bash
+helm upgrade --install argo-workflows .
+```
+
+The chart automatically:
+- Creates the `argo` namespace (via Helm hook)
+- Deploys Argo Workflows controller
+- Deploys MinIO with 100Gi storage
+- Creates MinIO buckets (via Helm hook)
+- Deploys scheduled CronWorkflows
+
+### Custom Installation
+
+Override values:
+
+```bash
+helm upgrade --install argo-workflows . \
+  --set controller.replicaCount=2 \
+  --set workflows.hourly.schedule="0 */2 * * *"
+```
+
+## Configuration
+
+### Workflow Schedules
+
+Configured in `values.yaml`:
+
+```yaml
+workflows:
+  hourly:
+    enabled: true
+    schedule: "0 * * * *"
+    timezone: "America/Los_Angeles"
+    
+    jobs:
+      - name: swell-scraper-hourly
+        enabled: true
+      - name: wind-scraper-hourly
+        enabled: true
+```
+
+### MinIO Configuration
+
+```yaml
+minio:
+  enabled: true
+  ports:
+    nodeApi: 31000
+  buckets:
+    - argo-logs
+```
+
+### Controller Resources
+
+```yaml
+controller:
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+```
+
+## Verification
+
+### Check Deployment Status
+
+```bash
+# Check all resources
+kubectl get all -n argo
+
+# Check CronWorkflows
+kubectl get cronworkflows -n argo
+
+# Check workflows
+kubectl get workflows -n argo
+```
+
+### Verify MinIO Buckets
+
+```bash
+# Install MinIO client
+brew install minio/stable/mc
+
+# Configure alias
+mc alias set minio http://master:31000 admin fidelio!
+
+# List buckets
+mc ls minio
+```
+
+## Accessing Services
+
+### MinIO Console
+
+Web interface for bucket management:
+
+```
+URL: http://master:31001
+Username: admin
+Password: fidelio!
+```
+
+### MinIO S3 API
+
+Programmatic access:
+
+```
+Endpoint: http://master:31000
+Access Key: admin
+Secret Key: fidelio!
+```
+
+## Managing Workflows
+
+### View Workflows
+
+```bash
+# List all workflows
+kubectl get workflows -n argo
+
+# List CronWorkflows
+kubectl get cronworkflows -n argo
+
+# Describe a workflow
+kubectl describe workflow <workflow-name> -n argo
+```
+
+### View Workflow Logs
+
+```bash
+# Using kubectl
+kubectl logs -n argo <workflow-pod-name>
+
+# Using argo CLI (if installed)
+argo logs -n argo <workflow-name>
+```
+
+### Trigger Manual Workflow
+
+```bash
+argo submit -n argo --from cronworkflow/swell-scraper-hourly
+```
+
+## Adding New Workflows
+
+### 1. Update values.yaml
+
+```yaml
+workflows:
+  daily:
+    enabled: true
+    schedule: "0 0 * * *"
+    timezone: "America/Los_Angeles"
+    
+    jobs:
+      - name: daily-cleanup
+        enabled: true
+```
+
+### 2. Create Workflow Template
+
+Create `templates/workflows/daily.yaml` following the pattern in `hourly.yaml`.
+
+### 3. Deploy
+
+```bash
+helm upgrade argo-workflows .
+```
+
+## Troubleshooting
+
+### CronWorkflow Not Running
+
+1. Check CronWorkflow status:
+   ```bash
+   kubectl describe cronworkflow <name> -n argo
+   ```
+
+2. Check controller logs:
+   ```bash
+   kubectl logs -n argo -l app.kubernetes.io/component=controller
+   ```
+
+3. Verify schedule syntax:
+   ```bash
+   kubectl get cronworkflow <name> -n argo -o yaml | grep schedule
+   ```
+
+### MinIO PVC Pending
+
+1. Verify SSD is mounted:
+   ```bash
+   ssh master "df -h | grep /mnt/ssd"
+   ```
+
+2. Check PV/PVC status:
+   ```bash
+   kubectl get pv,pvc -n argo
+   kubectl describe pvc minio-pvc -n argo
+   ```
+
+### Workflow Fails
+
+1. Check workflow status:
+   ```bash
+   kubectl get workflow <name> -n argo
+   ```
+
+2. View logs:
+   ```bash
+   kubectl logs -n argo <workflow-pod-name>
+   ```
+
+3. Check image pull:
+   ```bash
+   kubectl describe pod <workflow-pod-name> -n argo
+   ```
+
+## Upgrading
+
+### Update Workflow Configuration
+
+```bash
+# Edit values.yaml
+vim values.yaml
+
+# Upgrade
+helm upgrade argo-workflows .
+```
+
+### Update CRDs
 
 ```bash
 kubectl apply -k ./crds/
 ```
 
-Verify CRDs are installed:
+## Uninstalling
 
 ```bash
-kubectl get crds | grep argo
+# Uninstall chart
+helm uninstall argo-workflows
+
+# Remove CRDs (optional)
+kubectl delete -k ./crds/
+
+# Remove PVs (optional)
+kubectl delete pv minio-pv
 ```
 
-You should see: `cronworkflows.argoproj.io`, `workflows.argoproj.io`, `workflowtemplates.argoproj.io`, etc.
+## Values Reference
 
-### Step 2: Deploy Chart
+See [STANDARDS.md](../STANDARDS.md) for complete values structure.
 
-The chart automatically creates the `argo` namespace using Helm pre-install hooks:
+### Key Configuration Options
 
-```bash
-helm install argo-workflows .
-```
-
-This deploys:
-- Argo Workflows controller
-- MinIO (S3-compatible storage)
-- RBAC resources
-- CronWorkflows for scheduled jobs
+| Parameter | Description | Default |
+|-----------|-------------|----------|
+| `metadata.namespace` | Namespace for deployment | `argo` |
+| `controller.replicaCount` | Controller replicas | `1` |
+| `workflows.hourly.schedule` | Cron schedule | `0 * * * *` |
+| `workflows.hourly.timezone` | Timezone for schedules | `America/Los_Angeles` |
+| `minio.enabled` | Enable MinIO subchart | `true` |
+| `minio.buckets` | Buckets to create | `[argo-logs]` |
 
 ## Components
 
 ### Argo Workflows Controller
 - Orchestrates workflow execution
-- Manages CronWorkflows for scheduled data scraping
+- Manages CronWorkflows
+- Handles workflow lifecycle
 
 ### MinIO
 - S3-compatible object storage
-- Stores workflow artifacts and logs
-- Runs on master node with SSD storage
-- **Storage**: 100Gi at `/mnt/ssd/minio-data`
-- **Access**: 
-  - API: `http://master:31000`
-  - Console: `http://master:31001`
-  - Credentials: `admin` / `fidelio!`
+- 100Gi SSD storage
+- Workflow log storage
+- Artifact repository
 
-### CronWorkflows
-- `swell-scraper-hourly`: Runs hourly swell data collection
-- `wind-scraper-hourly`: Runs hourly wind data collection
+### Scheduled Workflows
+- **swell-scraper-hourly**: Hourly swell data collection
+- **wind-scraper-hourly**: Hourly wind data collection
 
-### Argo UI Status
-The Argo Server UI has **not** been deployed due to a metadata issue that arose after initializing the PostgreSQL database. The Argo controller attempted to query a column that did not exist in the workflows tables, which led to various UI features failing and rendering the UI essentially useless. This issue also prevented persistence from being enabled, as tracking previous workflow runs was not possible. Since the UI is a low-priority item, it has been omitted from this deployment. Artifact storage is already configured via `boto3`, which uploads logs to MinIO.
+## Related Documentation
 
-### Future Logging Strategy
+- [Helm Chart Standards](../STANDARDS.md)
+- [Argo Workflows Documentation](https://argoproj.github.io/argo-workflows/)
+- [MinIO Documentation](https://min.io/docs/minio/kubernetes/upstream/)
 
-Workflow execution logs are currently being ingested in JSON format. In a future update, log tracking and analysis will be handled via OpenSearch, providing a more structured and efficient method for monitoring workflow execution.
+## Notes
+
+- **Argo UI**: Not deployed in this configuration
+- **Logging**: Workflows upload logs to MinIO via boto3
+- **Future**: OpenSearch integration planned for log analysis

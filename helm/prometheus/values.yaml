@@ -1,4 +1,194 @@
-server:
+# ==============================================================================
+# GLOBAL CONFIGURATION
+# ==============================================================================
+global:
+  environment: prod
+  clusterDomain: cluster.local
+
+# ==============================================================================
+# METADATA
+# ==============================================================================
+metadata:
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: observability
+  annotations: {}
+
+# ==============================================================================
+# IMAGE CONFIGURATION
+# ==============================================================================
+image:
+  repository: prom/prometheus
+  tag: latest
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# ==============================================================================
+# DEPLOYMENT CONFIGURATION
+# ==============================================================================
+deployment:
+  replicaCount: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  restartPolicy: Always
+
+# ==============================================================================
+# RESOURCE MANAGEMENT
+# ==============================================================================
+resources:
+  limits:
+    cpu: "1000m"
+    memory: "2Gi"
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+
+# ==============================================================================
+# NETWORKING
+# ==============================================================================
+service:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+  annotations: {}
+  sessionAffinity: None
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  tls: []
+
+# ==============================================================================
+# STORAGE
+# ==============================================================================
+persistence:
+  enabled: true
+  storageClass: "local-path"
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+  existingClaim: ""
+  
   persistentVolume:
     enabled: true
-    existingClaim: prometheus-pvc
+    hostPath: "/mnt/ssd/prometheus-data"
+    nodeAffinity:
+      required:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                  - master
+
+# ==============================================================================
+# SECURITY
+# ==============================================================================
+securityContext:
+  pod:
+    runAsNonRoot: false
+    fsGroup: 65534
+  container:
+    allowPrivilegeEscalation: false
+    runAsNonRoot: false
+    runAsUser: 65534
+    capabilities:
+      drop:
+        - ALL
+
+rbac:
+  enabled: true
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+
+# ==============================================================================
+# CONFIGURATION
+# ==============================================================================
+config:
+  scrapeInterval: 15s
+  evaluationInterval: 15s
+  
+  # Scrape configurations
+  scrapeConfigs:
+    - jobName: prometheus
+      targets:
+        - localhost:9090
+    
+    - jobName: raspberry-pi-nodes
+      targets:
+        - master:9100
+        - worker1:9100
+        - worker2:9100
+        - worker3:9100
+        - postgres:9100
+    
+    - jobName: postgres
+      targets:
+        - postgres:9187
+
+# ==============================================================================
+# HEALTH CHECKS
+# ==============================================================================
+healthChecks:
+  liveness:
+    enabled: true
+    httpGet:
+      path: /-/healthy
+      port: 9090
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    successThreshold: 1
+    failureThreshold: 3
+  
+  readiness:
+    enabled: true
+    httpGet:
+      path: /-/ready
+      port: 9090
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 3
+
+# ==============================================================================
+# SCHEDULING
+# ==============================================================================
+scheduling:
+  nodeSelector:
+    kubernetes.io/hostname: master
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+
+# ==============================================================================
+# MONITORING
+# ==============================================================================
+monitoring:
+  metrics:
+    enabled: true
+    port: 9090
+    path: /metrics
+  logging:
+    level: info
+    format: logfmt
+
+# ==============================================================================
+# RETENTION
+# ==============================================================================
+retention:
+  time: 15d
+  size: ""

@@ -1,23 +1,52 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: minio
-  namespace: argo
+  name: {{ include "minio.fullname" . }}
+  namespace: {{ .Values.metadata.namespace }}
+  labels:
+    {{- include "minio.labels" . | nindent 4 }}
+  {{- with .Values.metadata.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
-  replicas: {{ .Values.minio.replicaCount }}
+  replicas: {{ .Values.deployment.replicaCount }}
   selector:
     matchLabels:
-      app: minio
+      {{- include "minio.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: minio
+        {{- include "minio.selectorLabels" . | nindent 8 }}
     spec:
+      {{- with .Values.scheduling.nodeSelector }}
       nodeSelector:
-        node-role.kubernetes.io/control-plane: "true"
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduling.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduling.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduling.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.securityContext.pod }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      restartPolicy: {{ .Values.deployment.restartPolicy }}
       containers:
         - name: minio
-          image: {{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext.container }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           args:
             - server
             - /data
@@ -27,42 +56,80 @@ spec:
             - name: MINIO_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: minio-creds
+                  name: {{ include "minio.fullname" . }}-creds
                   key: accesskey
             - name: MINIO_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: minio-creds
+                  name: {{ include "minio.fullname" . }}-creds
                   key: secretkey
           ports:
-            - containerPort: {{ .Values.minio.ports.api }}
-              name: minio-api
-            - containerPort: {{ .Values.minio.ports.web }}
-              name: minio-web
+            - containerPort: 9000
+              name: api
+              protocol: TCP
+            - containerPort: 9001
+              name: console
+              protocol: TCP
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.healthChecks.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.healthChecks.liveness.httpGet.path }}
+              port: {{ .Values.healthChecks.liveness.httpGet.port }}
+            initialDelaySeconds: {{ .Values.healthChecks.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthChecks.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthChecks.liveness.timeoutSeconds }}
+            successThreshold: {{ .Values.healthChecks.liveness.successThreshold }}
+            failureThreshold: {{ .Values.healthChecks.liveness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.healthChecks.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.healthChecks.readiness.httpGet.path }}
+              port: {{ .Values.healthChecks.readiness.httpGet.port }}
+            initialDelaySeconds: {{ .Values.healthChecks.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthChecks.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthChecks.readiness.timeoutSeconds }}
+            successThreshold: {{ .Values.healthChecks.readiness.successThreshold }}
+            failureThreshold: {{ .Values.healthChecks.readiness.failureThreshold }}
+          {{- end }}
           volumeMounts:
             - name: minio-storage
               mountPath: /data
       volumes:
         - name: minio-storage
           persistentVolumeClaim:
-            claimName: minio-pvc
+            claimName: {{ include "minio.fullname" . }}-pvc
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: minio
-  namespace: argo
+  name: {{ include "minio.fullname" . }}
+  namespace: {{ .Values.metadata.namespace }}
+  labels:
+    {{- include "minio.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
+  type: {{ .Values.service.type }}
+  {{- with .Values.service.sessionAffinity }}
+  sessionAffinity: {{ . }}
+  {{- end }}
   ports:
-    - name: minio-api
-      port: {{ .Values.minio.ports.api }}
-      targetPort: {{ .Values.minio.ports.api }}
-      nodePort: {{ .Values.minio.ports.nodeApi }}
-    - name: minio-web-ui
-      port: {{ .Values.minio.ports.web }}
-      targetPort: {{ .Values.minio.ports.web }}
-      nodePort: {{ .Values.minio.ports.nodeWeb }}
+  {{- range .Values.service.ports }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      {{- if .nodePort }}
+      nodePort: {{ .nodePort }}
+      {{- end }}
+      protocol: {{ .protocol }}
+  {{- end }}
   selector:
-    app: minio
-  type: NodePort
+    {{- include "minio.selectorLabels" . | nindent 4 }}

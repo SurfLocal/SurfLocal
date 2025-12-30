@@ -1,14 +1,24 @@
+{{- if .Values.controller.serviceAccount.create }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: argo
-  namespace: {{ .Values.namespace }}
+  name: {{ include "argo-workflows.fullname" . }}-controller
+  namespace: {{ .Values.metadata.namespace }}
+  labels:
+    {{- include "argo-workflows.labels" . | nindent 4 }}
+  {{- with .Values.controller.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: argo-role
+  name: {{ include "argo-workflows.fullname" . }}-controller
+  labels:
+    {{- include "argo-workflows.labels" . | nindent 4 }}
 rules:
   - apiGroups: [""]
     resources: ["pods", "pods/logs"]
@@ -51,12 +61,18 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: argo-role-binding
+  name: {{ include "argo-workflows.fullname" . }}-controller
+  labels:
+    {{- include "argo-workflows.labels" . | nindent 4 }}
 subjects:
   - kind: ServiceAccount
-    name: argo
-    namespace: {{ .Values.namespace }}
+    {{- if .Values.controller.serviceAccount.create }}
+    name: {{ include "argo-workflows.fullname" . }}-controller
+    {{- else }}
+    name: {{ .Values.controller.serviceAccount.name | default "default" }}
+    {{- end }}
+    namespace: {{ .Values.metadata.namespace }}
 roleRef:
   kind: ClusterRole
-  name: argo-role
+  name: {{ include "argo-workflows.fullname" . }}-controller
   apiGroup: rbac.authorization.k8s.io

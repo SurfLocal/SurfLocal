@@ -1,5 +1,17 @@
 apiVersion: v2
 name: minio
-description: A Helm chart for MinIO
+description: MinIO object storage for Argo Workflows artifact repository
+type: application
 version: 1.0.0
-appVersion: "2025-03-10"
+appVersion: "latest"
+keywords:
+  - storage
+  - minio
+  - s3
+  - object-storage
+  - argo
+maintainers:
+  - name: SurfLocal Team
+home: https://min.io/
+sources:
+  - https://github.com/minio/minio

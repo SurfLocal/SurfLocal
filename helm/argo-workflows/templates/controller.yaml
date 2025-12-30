@@ -1,25 +1,43 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: argo-controller
-  namespace: {{ .Values.namespace }}
+  name: {{ include "argo-workflows.fullname" . }}-controller
+  namespace: {{ .Values.metadata.namespace }}
+  labels:
+    {{- include "argo-workflows.controller.labels" . | nindent 4 }}
+  {{- with .Values.metadata.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
-  replicas: {{ .Values.replicaCount.controller }}
+  replicas: {{ .Values.controller.replicaCount }}
   selector:
     matchLabels:
-      app: argo-controller
+      {{- include "argo-workflows.controller.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: argo-controller
+        {{- include "argo-workflows.controller.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: argo
+      {{- if .Values.controller.serviceAccount.create }}
+      serviceAccountName: {{ include "argo-workflows.fullname" . }}-controller
+      {{- else }}
+      serviceAccountName: {{ .Values.controller.serviceAccount.name | default "default" }}
+      {{- end }}
       containers:
-        - name: argo-controller
-          image: {{ .Values.image.controller }}
+        - name: workflow-controller
+          image: "{{ .Values.controller.image.repository }}:{{ .Values.controller.image.tag }}"
+          imagePullPolicy: {{ .Values.controller.image.pullPolicy }}
           env:
             - name: LEADER_ELECTION_IDENTITY
-              value: "argo-controller"
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           command: ["workflow-controller"]
-          args: ["--configmap", "workflow-controller-configmap"]
-          resources: {{ toYaml .Values.resources.controller | nindent 12 }}
+          args:
+            - "--configmap"
+            - "{{ include "argo-workflows.fullname" . }}-controller-configmap"
+          {{- with .Values.controller.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

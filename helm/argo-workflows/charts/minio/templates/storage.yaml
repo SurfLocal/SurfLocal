@@ -1,42 +1,45 @@
+{{- if .Values.persistence.enabled }}
+{{- if .Values.persistence.persistentVolume.enabled }}
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: minio-pv
+  name: {{ include "minio.fullname" . }}-pv
   labels:
-    type: local
-    app: minio
+    {{- include "minio.labels" . | nindent 4 }}
 spec:
-  storageClassName: minio-storage
+  storageClassName: {{ .Values.persistence.storageClass }}
   capacity:
-    storage: {{ .Values.minio.persistence.size }}
+    storage: {{ .Values.persistence.size }}
   accessModes:
-    - ReadWriteOnce
+    {{- toYaml .Values.persistence.accessModes | nindent 4 }}
   persistentVolumeReclaimPolicy: Retain
   hostPath:
-    path: {{ .Values.minio.persistence.pvPath }}
+    path: {{ .Values.persistence.persistentVolume.hostPath }}
     type: DirectoryOrCreate
+  {{- with .Values.persistence.persistentVolume.nodeAffinity }}
   nodeAffinity:
-    required:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: node-role.kubernetes.io/control-plane
-              operator: In
-              values:
-                - "true"
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
 
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: minio-pvc
-  namespace: argo
+  name: {{ include "minio.fullname" . }}-pvc
+  namespace: {{ .Values.metadata.namespace }}
+  labels:
+    {{- include "minio.labels" . | nindent 4 }}
 spec:
-  storageClassName: minio-storage
+  storageClassName: {{ .Values.persistence.storageClass }}
   accessModes:
-    - ReadWriteOnce
+    {{- toYaml .Values.persistence.accessModes | nindent 4 }}
   resources:
     requests:
-      storage: {{ .Values.minio.persistence.size }}
+      storage: {{ .Values.persistence.size }}
+  {{- if not .Values.persistence.existingClaim }}
   selector:
     matchLabels:
-      app: minio
+      {{- include "minio.selectorLabels" . | nindent 6 }}
+  {{- end }}
+{{- end }}
