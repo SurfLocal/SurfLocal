@@ -11,6 +11,9 @@
 - name: Deploy Kubernetes
   import_playbook: deploy_kubernetes.yaml
 
+- name: Configure CoreDNS
+  import_playbook: deploy_coredns.yaml
+
 - name: Deploy Helm
   import_playbook: deploy_helm.yaml
 
@@ -25,3 +28,6 @@
 
 - name: Deploy Postgres
   import_playbook: deploy_postgres.yaml
+
+- name: Deploy PostgreSQL Exporter
+  import_playbook: deploy_postgres_exporter.yaml

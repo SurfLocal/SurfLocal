@@ -20,3 +20,9 @@ data:
             - 'worker1:9100'
             - 'worker2:9100'
             - 'worker3:9100'
+            - 'postgres:9100'
+
+      - job_name: 'postgres'
+        static_configs:
+          - targets:
+            - 'postgres:9187'
