@@ -64,13 +64,14 @@ jobs:
 
           # Build the Docker image for multiple platforms
           docker buildx build --platform linux/amd64,linux/arm64 \
-                       --build-arg DB_HOST=${{ secrets.DB_HOST }} \
+                       --build-arg DB_HOST="postgres" \
                        --build-arg DB_USER=${{ secrets.DB_USER }} \
                        --build-arg DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
                        --build-arg DB_NAME=${{ secrets.DB_NAME }} \
-                       --build-arg API_KEY=${{ secrets.API_KEY }} \
+                       --build-arg OPENWEATHER_API_KEY=${{ secrets.OPENWEATHER_API_KEY }} \
                        --build-arg MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }} \
                        --build-arg MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }} \
+                       --build-arg MINIO_ENDPOINT="http://master:31000" \
                        -t ${IMAGE_NAME}:${IMAGE_TAG} \
                        -t ${IMAGE_NAME}:${TAG_PREFIX}-latest \
                        -f web-scraping/web_scraper.Dockerfile . --push
