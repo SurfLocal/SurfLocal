@@ -14,3 +14,5 @@ minio:
     web: 9001
     nodeApi: 31000
     nodeWeb: 31001
+  buckets:
+    - argo-logs

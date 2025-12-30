@@ -23,3 +23,10 @@ hourlyWorkflows:
   jobs:
     - swell-scraper-hourly
     - wind-scraper-hourly
+
+# MinIO bucket configuration
+minio:
+  ports:
+    nodeApi: 31000
+  buckets:
+    - argo-logs
