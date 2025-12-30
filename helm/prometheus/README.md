@@ -1,43 +1,35 @@
-# Deploying Prometheus via Helm
+# Prometheus Helm Chart
 
-This guide provides instructions on how to deploy Prometheus on your Kubernetes cluster using Helm. It also includes steps to perform port forwarding to access the Prometheus web UI.
+This chart deploys Prometheus for monitoring the Raspberry Pi cluster.
 
 ## Prerequisites
 
-- Kubernetes cluster
-- Helm installed and configured
-- Access to your Kubernetes cluster with kubectl
-- Node Exporter installed and running on all nodes
+1. **Kubernetes cluster running** (k3s on Raspberry Pi cluster)
+2. **Node Exporter installed** on all nodes (deployed via Ansible)
+3. **kubectl configured** with cluster access
 
-## Installing Node Exporter
+### Install Node Exporter
 
-Before deploying Prometheus, ensure that Node Exporter is installed and running on all your nodes. If you have not already done so, navigate to the Ansible directory and run the playbook for its installation.
+Before deploying Prometheus, ensure Node Exporter is running on all nodes:
 
-## Deploy Prometheus
-
-### Add the Prometheus Helm Repository
-
-First, add the Prometheus Community Helm repository:
 ```bash
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo update
+cd ../../ansible
+ansible-playbook playbooks/deploy_node_exporter.yaml
 ```
 
-### Create a Namespace for Prometheus
+## Installation
 
-Create a monitoring namespace:
+The chart automatically creates the `monitoring` namespace using Helm pre-install hooks:
+
 ```bash
-kubectl create namespace monitoring
+helm install prometheus .
 ```
 
-### Install Prometheus
-
-Navigate to your Helm chart directory and install Prometheus:
-```bash
-cd helm/prometheus
-helm install prometheus . --namespace monitoring
-```
-This command installs Prometheus in the monitoring namespace using the local Helm chart.
+This deploys:
+- Prometheus server
+- ConfigMap with scrape targets for all Raspberry Pi nodes
+- PersistentVolume for metrics storage
+- Service for accessing Prometheus UI
 
 ## Verify the Deployment
 
@@ -67,22 +59,26 @@ NAME                    TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AG
 prometheus              ClusterIP   10.43.200.100    <none>        9090/TCP   2m
 ```
 
-### Port Forward to Access Prometheus UI
+## Accessing Prometheus
 
-To access the Prometheus web UI, you need to perform port forwarding:
+Prometheus uses a ClusterIP service and is only accessible within the Kubernetes cluster. External access will be provided through Grafana in a future deployment.
+
+### Internal Cluster Access
+
+From within the cluster:
+```
+prometheus.monitoring.svc.cluster.local:9090
+```
+
+### Port Forward (For Development/Testing)
+
+To access temporarily from your local machine:
+
 ```bash
-kubectl port-forward svc/prometheus-server 9090:9090 -n monitoring
+kubectl port-forward svc/prometheus 9090:9090 -n monitoring
 ```
 
-This forwards the Prometheus server port to `localhost:9090` on your local machine.
-
-### Access Prometheus UI
-
-Open your web browser and navigate to:
-```plaintext
-http://localhost:9090
-```
-You should see the Prometheus web interface.
+Then navigate to `http://localhost:9090`
 
 #### Run the `up` Query
 
@@ -93,9 +89,11 @@ To verify that Prometheus is scraping the metrics from all nodes, run the `up` q
 
 Expected Output:
 ```plaintext
-up{instance="192.168.86.232:9100", job="raspberry-pi-nodes"} 1
-up{instance="192.168.86.233:9100", job="raspberry-pi-nodes"} 1
-up{instance="192.168.86.234:9100", job="raspberry-pi-nodes"} 1
-up{instance="192.168.86.235:9100", job="raspberry-pi-nodes"} 1
+up{instance="master:9100", job="raspberry-pi-nodes"} 1
+up{instance="worker1:9100", job="raspberry-pi-nodes"} 1
+up{instance="worker2:9100", job="raspberry-pi-nodes"} 1
+up{instance="worker3:9100", job="raspberry-pi-nodes"} 1
 up{instance="localhost:9090", job="prometheus"} 1
 ```
+
+**Note**: If you previously had IP-based targets, those metrics will remain in Prometheus for the default 15-day retention period. The new hostname-based targets will start accumulating immediately alongside the old ones.

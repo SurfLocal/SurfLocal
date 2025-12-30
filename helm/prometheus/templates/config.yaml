@@ -16,7 +16,7 @@ data:
       - job_name: 'raspberry-pi-nodes'
         static_configs:
           - targets:
-            - '192.168.86.232:9100'
-            - '192.168.86.233:9100'
-            - '192.168.86.234:9100'
-            - '192.168.86.235:9100'
+            - 'master:9100'
+            - 'worker1:9100'
+            - 'worker2:9100'
+            - 'worker3:9100'

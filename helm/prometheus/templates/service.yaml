@@ -4,6 +4,7 @@ metadata:
   name: prometheus
   namespace: monitoring
 spec:
+  type: ClusterIP
   selector:
     app: prometheus
   ports:
