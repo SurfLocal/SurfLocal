@@ -7,7 +7,8 @@ from datetime import datetime
 import boto3
 
 # S3 Configuration (must be set via environment variables)
-MINIO_ENDPOINT = 'minio.argo.svc.cluster.local:9000'  # MinIO endpoint
+# MINIO_ENDPOINT can be overridden via env var, defaults to Kubernetes service DNS
+MINIO_ENDPOINT = os.getenv('MINIO_ENDPOINT', 'http://minio.argo.svc.cluster.local:9000')
 ACCESS_KEY = os.getenv('MINIO_ACCESS_KEY')
 SECRET_KEY = os.getenv('MINIO_SECRET_KEY')
 BUCKET_NAME = 'argo-logs'
@@ -26,7 +27,7 @@ class Logger:
         self.log_content = []  # Collect log entries in memory
         self.s3_client = boto3.client(
             's3',
-            endpoint_url=f'http://{MINIO_ENDPOINT}',
+            endpoint_url=MINIO_ENDPOINT,
             aws_access_key_id=ACCESS_KEY,
             aws_secret_access_key=SECRET_KEY,
             config=boto3.session.Config(signature_version='s3v4')

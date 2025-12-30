@@ -37,7 +37,7 @@ def mock_env_vars():
         'DB_USER': 'test_user',
         'DB_PASSWORD': 'test_password',
         'DB_NAME': 'test_db',
-        'API_KEY': 'test_api_key'
+        'OPENWEATHER_API_KEY': 'test_api_key'
     }
     with patch.dict(os.environ, env_vars):
         yield env_vars
