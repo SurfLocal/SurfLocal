@@ -1,4 +1,9 @@
 ---
+# First gather facts from all hosts to populate hostvars with IPs
+- name: Gather facts from all hosts
+  hosts: all
+  gather_facts: true
+
 - name: Setup PostgreSQL Database 
   hosts: database_node
   become: true
