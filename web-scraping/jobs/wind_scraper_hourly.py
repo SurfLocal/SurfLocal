@@ -11,7 +11,7 @@ import requests
 from utils import Logger, PostgresConnection
 
 # Accessing environment variables for DB connection and API key info
-API_KEY = os.getenv("API_KEY")
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 DB_HOST = os.getenv("DB_HOST")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
@@ -28,7 +28,7 @@ def fetch_wind_data(latitude, longitude, logger):
     Returns:
         dict: A dictionary containing wind speed, wind direction, and wind gust (if available).
     """
-    url = f"https://api.openweathermap.org/data/2.5/weather?lat={latitude}&lon={longitude}&appid={API_KEY}"
+    url = f"https://api.openweathermap.org/data/2.5/weather?lat={latitude}&lon={longitude}&appid={OPENWEATHER_API_KEY}"
     try:
         response = requests.get(url)
         response.raise_for_status()  # Will raise HTTPError for bad responses (4xx, 5xx)
