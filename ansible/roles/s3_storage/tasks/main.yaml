@@ -1,0 +1,79 @@
+---
+#################################
+# MOUNT SSD FOR S3 STORAGE      #
+#################################
+
+- name: Find the largest available drive
+  command: lsblk -b -o NAME,TYPE,SIZE,FSAVAIL,FSTYPE,MOUNTPOINT --json
+  register: lsblk_output
+  changed_when: false
+
+- name: Parse available partitions
+  set_fact:
+    largest_partition: "{{ (lsblk_output.stdout | from_json).blockdevices 
+                          | selectattr('children', 'defined')
+                          | map(attribute='children') 
+                          | flatten 
+                          | selectattr('fsavail', 'defined') 
+                          | selectattr('fsavail', 'ne', 'null') 
+                          | sort(attribute='fsavail', reverse=True) 
+                          | first | default({}, true) }}"
+
+- name: Find largest unformatted disk if no mounted partitions found
+  set_fact:
+    largest_partition: "{{ (lsblk_output.stdout | from_json).blockdevices 
+                          | selectattr('fstype', 'equalto', null)
+                          | selectattr('type', 'equalto', 'disk')
+                          | sort(attribute='size', reverse=True) 
+                          | first | default(largest_partition, true) }}"
+  when: largest_partition.name is not defined
+
+- name: Ensure SSD mount directory exists
+  file:
+    path: /mnt/ssd
+    state: directory
+    mode: '0755'
+
+- name: Create a symlink for the device as /dev/ssd
+  file:
+    src: "/dev/{{ largest_partition.name }}"
+    dest: /dev/ssd
+    state: link
+    force: yes
+  when: largest_partition.name is defined
+
+- name: Format the drive if not already formatted
+  command: "mkfs.ext4 -F /dev/{{ largest_partition.name }}"
+  when: 
+    - largest_partition.name is defined
+    - (largest_partition.fstype == "" or largest_partition.fstype is none)
+
+- name: Mount the SSD at /mnt/ssd
+  mount:
+    path: /mnt/ssd
+    src: "/dev/{{ largest_partition.name }}"
+    fstype: ext4
+    state: mounted
+  when: largest_partition.name is defined
+
+- name: Persist mount in /etc/fstab
+  lineinfile:
+    path: /etc/fstab
+    line: "/dev/ssd  /mnt/ssd  ext4  defaults,noatime  0 1"
+    state: present
+  when: largest_partition.name is defined
+
+- name: Create MinIO data directory
+  file:
+    path: /mnt/ssd/minio-data
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Set permissions for MinIO data directory
+  file:
+    path: /mnt/ssd/minio-data
+    state: directory
+    mode: '0777'
+    recurse: yes

@@ -1,0 +1,6 @@
+---
+- name: Setup S3 Storage on Master Node
+  hosts: master_node
+  become: true
+  roles:
+    - s3_storage
