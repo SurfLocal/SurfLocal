@@ -91,73 +91,57 @@
 # ALLOWED CONNECTIONS           #
 #################################
 
-- name: Configure PostgreSQL to listen on localhost and Kubernetes nodes
+- name: Configure PostgreSQL to listen on localhost and private network
   lineinfile:
     path: "/etc/postgresql/{{ postgresql_version_dir.stdout }}/main/postgresql.conf"
-    regexp: '^#listen_addresses'
-    line: "listen_addresses = 'localhost,master,worker1,worker2,worker3'"
+    regexp: '^#?listen_addresses'
+    line: "listen_addresses = 'localhost,{{ hostvars['postgres']['ansible_default_ipv4']['address'] }}'"
+
+- name: Allow local socket connections for postgres user (peer auth)
+  lineinfile:
+    path: /etc/postgresql/{{ postgresql_version_dir.stdout }}/main/pg_hba.conf
+    line: "local   all             postgres                                peer"
+    insertafter: "^# TYPE"
+    state: present
+
+- name: Allow local socket connections for other users (password auth)
+  lineinfile:
+    path: /etc/postgresql/{{ postgresql_version_dir.stdout }}/main/pg_hba.conf
+    line: "local   all             all                                     scram-sha-256"
+    insertafter: "^local.*postgres.*peer"
+    state: present
 
 - name: Allow localhost connections in pg_hba.conf
   lineinfile:
     path: /etc/postgresql/{{ postgresql_version_dir.stdout }}/main/pg_hba.conf
-    line: "host    all             all             127.0.0.1/32        md5"
+    line: "host    all             all             127.0.0.1/32        scram-sha-256"
     state: present
 
-- name: Allow Kubernetes nodes connections in pg_hba.conf
+- name: Allow cluster node connections in pg_hba.conf
   lineinfile:
     path: /etc/postgresql/{{ postgresql_version_dir.stdout }}/main/pg_hba.conf
-    line: "host    all             all             {{ item }}        md5"
+    line: "host    all             all             {{ hostvars[item]['ansible_default_ipv4']['address'] }}/32        scram-sha-256"
     state: present
   loop:
-    - "master"
-    - "worker1"
-    - "worker2"
-    - "worker3"
+    - master
+    - worker1
+    - worker2
+    - worker3
+    - postgres
 
 #################################
 # SYSTEMD SERVICE               #
 #################################
 
-- name: Create custom PostgreSQL systemd service
-  copy:
-    dest: /etc/systemd/system/postgres.service
-    content: |
-      [Unit]
-      Description=PostgreSQL Database Server
-      After=network.target
-
-      [Service]
-      Type=forking
-      User=postgres
-      Group=postgres
-      ExecStart=/usr/lib/postgresql/{{ postgresql_version_dir.stdout }}/bin/pg_ctl start -D /etc/postgresql/{{ postgresql_version_dir.stdout }}/main -l /var/log/postgresql/postgresql.log
-      ExecStop=/usr/lib/postgresql/{{ postgresql_version_dir.stdout }}/bin/pg_ctl stop -D /etc/postgresql/{{ postgresql_version_dir.stdout }}/main
-      ExecReload=/usr/lib/postgresql/{{ postgresql_version_dir.stdout }}/bin/pg_ctl reload -D /etc/postgresql/{{ postgresql_version_dir.stdout }}/main
-      PIDFile=/var/run/postgresql/{{ postgresql_version_dir.stdout }}-main.pid
-      Restart=always
-      LimitNOFILE=4096
-
-      [Install]
-      WantedBy=multi-user.target
-
-- name: Reload systemd to pick up new service
-  command: systemctl daemon-reload
-
-- name: Enable and start PostgreSQL service
+- name: Restart PostgreSQL service to apply configuration changes
   systemd:
-    name: postgres
+    name: "postgresql@{{ postgresql_version_dir.stdout }}-main"
     enabled: yes
-    state: started
-
-- name: Restart PostgreSQL service
-  systemd:
-    name: postgres
     state: restarted
-    enabled: yes  # Ensures PostgreSQL starts on boot
 
 - name: Confirm PostgreSQL service is running
   systemd:
-    name: postgres
+    name: "postgresql@{{ postgresql_version_dir.stdout }}-main"
     state: started
 
 #################################
