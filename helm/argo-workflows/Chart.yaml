@@ -4,3 +4,6 @@ description: A Helm chart for deploying Argo Workflows
 type: application
 version: 0.1.0
 appVersion: "v3.5.3"
+
+# Exclude CRDs from Helm installation
+# CRDs should be installed separately with kubectl apply -k ./crds/

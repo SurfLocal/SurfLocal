@@ -13,7 +13,8 @@ spec:
       labels:
         app: minio
     spec:
-      containers:
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: "true"
       containers:
         - name: minio
           image: {{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}

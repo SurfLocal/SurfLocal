@@ -1,9 +1,9 @@
 minio:
-  storageClass: "standard"
+  storageClass: "minio-storage"
   persistence:
     enabled: true
-    size: 10Gi
-    pvPath: "/mnt/minio-data"
+    size: 100Gi
+    pvPath: "/mnt/ssd/minio-data"
   replicaCount: 1
   image:
     repository: "minio/minio"

@@ -20,5 +20,8 @@
 - name: Deploy No-IP
   import_playbook: deploy_noip.yaml
 
+- name: Deploy S3 Storage
+  import_playbook: deploy_s3_storage.yaml
+
 - name: Deploy Postgres
   import_playbook: deploy_postgres.yaml
