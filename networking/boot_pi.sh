@@ -48,8 +48,38 @@ fi
 
 echo -e "\nConfiguring the hostname..."
 touch "$BOOT_DIR/ssh"  # Enable SSH
-echo "$HOST_NAME" > "$BOOT_DIR/hostname"  # Set the hostname
-echo "127.0.1.1   $HOST_NAME" > "$BOOT_DIR/hosts"  # Configure hosts file
+
+# Note: User credentials should be set via Raspberry Pi Imager before running this script
+
+# Create firstrun script to configure hostname on first boot
+cat > "$BOOT_DIR/firstrun.sh" << EOF
+#!/bin/bash
+set -e
+
+# Set the hostname
+CURRENT_HOSTNAME=\$(cat /etc/hostname | tr -d " \t\n\r")
+echo "$HOST_NAME" > /etc/hostname
+sed -i "s/127.0.1.1.*\$CURRENT_HOSTNAME/127.0.1.1\t$HOST_NAME/g" /etc/hosts
+
+# Remove this script from cmdline.txt after execution
+sed -i 's| systemd.run.*||g' /boot/firmware/cmdline.txt 2>/dev/null || sed -i 's| systemd.run.*||g' /boot/cmdline.txt 2>/dev/null || true
+
+# Reboot to apply hostname
+reboot
+EOF
+
+chmod +x "$BOOT_DIR/firstrun.sh"
+
+# Modify cmdline.txt to run firstrun.sh on first boot
+CMDLINE_FILE="$BOOT_DIR/cmdline.txt"
+if [ -f "$CMDLINE_FILE" ]; then
+  # Check if firstrun is already configured
+  if ! grep -q "systemd.run=" "$CMDLINE_FILE"; then
+    # Append firstrun command to existing cmdline
+    sed -i '' 's/$/ systemd.run=\/boot\/firmware\/firstrun.sh systemd.run_success_action=reboot systemd.unit=kernel-command-line.target/' "$CMDLINE_FILE"
+  fi
+fi
+
 echo "Hostname set to $HOST_NAME"
 
 # Unmount the disk

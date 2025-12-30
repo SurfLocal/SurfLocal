@@ -12,7 +12,9 @@ if [ -z "$1" ]; then
 fi
 
 HOST_NAME=$1
+HOST_NAME_LOCAL="$1.local"  # mDNS hostname for local network discovery
 USER_NAME="pi"
+HOSTS_FILE="/etc/hosts"
 SSH_KEY_PATH="$HOME/.ssh/cluster_key.pub"
 SSH_CONFIG_FILE="$HOME/.ssh/config"
 
@@ -28,9 +30,6 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
 else
   echo "SSH key already exists at $SSH_KEY_PATH"
 fi
-
-# Store SSH key contents in a variable
-SSH_KEY_CONTENT=$(<"$SSH_KEY_PATH")
 
 ##################################
 # Configure Local SSH Client
@@ -80,16 +79,97 @@ chmod 600 "$SSH_CONFIG_FILE"
 # Configure SSH and Copy Key on Remote Host
 ##################################
 
-ssh -q "$USER_NAME@$HOST_NAME" >> /dev/null 2>&1 << EOL
+# Wait for the Pi to come online
+echo "Waiting for $HOST_NAME_LOCAL to come online (this may take 1-2 minutes for first boot)..."
+MAX_ATTEMPTS=60
+ATTEMPT=0
+HOST_IP=""
 
-# Ensure SSH directory exists
-mkdir -p ~/.ssh && chmod 700 ~/.ssh
+# First try mDNS resolution
+while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+  HOST_IP=$(ping -c 1 -W 1 "$HOST_NAME_LOCAL" 2>/dev/null | head -1 | grep -oE '\([0-9.]+\)' | tr -d '()')
+  
+  if [ -n "$HOST_IP" ]; then
+    echo "Found $HOST_NAME_LOCAL at $HOST_IP"
+    break
+  fi
+  
+  ATTEMPT=$((ATTEMPT + 1))
+  printf "."
+  sleep 2
+done
+echo ""
 
-# Append SSH key to authorized_keys
-echo "$SSH_KEY_CONTENT" >> ~/.ssh/authorized_keys
+# If mDNS fails, scan local network for Raspberry Pi devices
+if [ -z "$HOST_IP" ]; then
+  echo "mDNS resolution failed. Scanning local network for Raspberry Pi devices..."
+  
+  # Get Raspberry Pi MAC prefixes (common ones)
+  RPI_MACS="b8:27:eb\|dc:a6:32\|e4:5f:01\|d8:3a:dd\|28:cd:c1\|2c:cf:67"
+  
+  # Find Raspberry Pis in ARP table
+  RPI_IPS=$(arp -a | grep -i "$RPI_MACS" | grep -oE '\([0-9.]+\)' | tr -d '()')
+  
+  if [ -z "$RPI_IPS" ]; then
+    echo "Error: No Raspberry Pi devices found on the network."
+    echo "Please ensure the Pi is powered on and connected to the network."
+    exit 1
+  fi
+  
+  echo "Found Raspberry Pi device(s). Checking which one is $HOST_NAME..."
+  
+  # Check each Pi to find the one with matching hostname
+  for ip in $RPI_IPS; do
+    # Check if SSH port is open
+    if nc -z -w 1 "$ip" 22 2>/dev/null; then
+      # Try to get hostname (will prompt for password if needed)
+      REMOTE_HOSTNAME=$(ssh -o ConnectTimeout=3 -o BatchMode=yes -o StrictHostKeyChecking=no "$USER_NAME@$ip" "hostname" 2>/dev/null || echo "")
+      
+      if [ "$REMOTE_HOSTNAME" = "$HOST_NAME" ]; then
+        HOST_IP="$ip"
+        echo "Found $HOST_NAME at $HOST_IP"
+        break
+      fi
+    fi
+  done
+  
+  if [ -z "$HOST_IP" ]; then
+    echo "Error: Could not find a Pi with hostname '$HOST_NAME'."
+    echo "Found Raspberry Pi devices at: $RPI_IPS"
+    echo "You may need to manually check which one is $HOST_NAME."
+    exit 1
+  fi
+fi
 
-# Set correct permissions on authorized_keys
-chmod 600 ~/.ssh/authorized_keys
+# Add entry to /etc/hosts if not already present
+if ! grep -q " $HOST_NAME$" "$HOSTS_FILE"; then
+  echo "Adding $HOST_NAME to $HOSTS_FILE..."
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "🔐 SUDO PASSWORD REQUIRED (Your local's password, not the Pi's)"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "$HOST_IP $HOST_NAME" | sudo tee -a "$HOSTS_FILE" > /dev/null
+  echo "✓ Added $HOST_NAME -> $HOST_IP to $HOSTS_FILE"
+else
+  echo "$HOST_NAME already exists in $HOSTS_FILE"
+fi
+
+# Remove old SSH host key if it exists (prevents host key mismatch errors)
+echo "Removing old SSH host key for $HOST_IP (if exists)..."
+ssh-keygen -R "$HOST_IP" 2>/dev/null || true
+ssh-keygen -R "$HOST_NAME" 2>/dev/null || true
+ssh-keygen -R "$HOST_NAME_LOCAL" 2>/dev/null || true
+
+# Copy SSH key using ssh-copy-id (handles password prompt properly)
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🔑 PI PASSWORD REQUIRED (The password you set in Raspberry Pi Imager)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Copying SSH key to $HOST_IP..."
+ssh-copy-id -i "$SSH_KEY_PATH" -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$USER_NAME@$HOST_IP"
+
+# Now configure SSH security on the remote host
+echo "Configuring SSH security on $HOST_NAME..."
+LC_ALL=C ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o LogLevel=ERROR "$USER_NAME@$HOST_IP" 'bash -s' << 'EOL' 2>&1 | grep -v -E "(setlocale|locale|warning:|perl:|LANGUAGE|LC_|LANG=|are supported|Falling back|_____)"
 
 # Modify SSH configuration to disable password authentication and enhance security
 echo -e "\n# Disable password-based authentication for SSH login
@@ -101,9 +181,12 @@ ChallengeResponseAuthentication no
 # Limit the number of authentication attempts per connection to 3
 MaxAuthTries 3" | sudo tee -a /etc/ssh/sshd_config > /dev/null
 
+# Disable the locale warning message for all users
+sudo touch /var/lib/cloud/instance/locale-check.skip 2>/dev/null || true
+
 # Restart SSH service to apply changes
-sudo systemctl enable ssh
-sudo systemctl restart ssh
+sudo systemctl enable ssh 2>/dev/null
+sudo systemctl restart ssh 2>/dev/null
 
 EOL
 
@@ -111,11 +194,14 @@ EOL
 # Verify SSH Key Copy Success
 ##################################
 
-if ssh -q "$USER_NAME@$HOST_NAME" "echo 'SSH Key copied successfully!'" &>/dev/null; then
-  echo -e "\nSSH key copied successfully to the host. You can now log in without a password."
-else
-  echo -e "\nFailed to copy SSH key to the host. Please check the hostname and SSH configuration."
-  exit 1
-fi
+# Wait a moment for SSH service to restart
+sleep 2
 
-echo -e "Setup complete for $HOST_NAME. You can now log in using your SSH key without a password prompt."
+if ssh -q -i "$HOME/.ssh/cluster_key" -o StrictHostKeyChecking=no "$USER_NAME@$HOST_NAME" "echo 'SSH Key copied successfully!'" &>/dev/null; then
+  echo -e "\n✓ SSH key copied successfully to the host. You can now log in without a password."
+  echo -e "✓ Password authentication has been disabled for security."
+  echo -e "\nSetup complete for $HOST_NAME. Test with: ssh $HOST_NAME"
+else
+  echo -e "\nWarning: Could not verify key-only login, but the key was copied."
+  echo -e "Try connecting with: ssh $HOST_NAME"
+fi

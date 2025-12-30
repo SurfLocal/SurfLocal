@@ -6,56 +6,99 @@
 
    - Download the Raspberry Pi Imager from [https://www.raspberrypi.org/software/](https://www.raspberrypi.org/software/).
    - Insert the SanDisk 32GB microSD card into your computer.
-   - Rename the microSD card to `boot`
-   - Open the Raspberry Pi Imager and choose the Raspberry Pi OS (64-bit).
-   - Select the SD card you inserted.
-   - Due to [recent changes](https://www.raspberrypi.com/news/raspberry-pi-bullseye-update-april-2022/), a username and password will have to be provided in order to enable SSH.
-   - Click "Next" and configure the host and username with corresponding password in the OS customization menu.
-   - When prompted that all existing data will be erased, click "Yes" that you would like to continue.
+   - Open the Raspberry Pi Imager:
+     1. **Choose Device:** Select your Raspberry Pi model (e.g., Raspberry Pi 4)
+     2. **Choose OS:** Select "Raspberry Pi OS (64-bit)" (recommended)
+     3. **Choose Storage:** Select your microSD card
+     4. Click **"Next"**
+   
+   - When prompted "Would you like to apply OS customisation settings?", click **"Edit Settings"**
+   
+   - **GENERAL Tab:**
+     - ✅ **Set hostname:** Leave UNCHECKED (the boot_pi.sh script will set this)
+     - ✅ **Set username and password:** CHECK THIS
+       - Username: `pi`
+       - Password: Choose a secure password (remember this - you'll need it once)
+     - ✅ **Configure wireless LAN:** CHECK THIS if using WiFi
+       - SSID: Your WiFi network name
+       - Password: Your WiFi password
+       - Wireless LAN country: Your country code (e.g., US)
+     - ✅ **Set locale settings:** CHECK THIS
+       - Time zone: Your timezone
+       - Keyboard layout: Your keyboard layout
+   
+   - **SERVICES Tab:**
+     - ✅ **Enable SSH:** CHECK THIS
+     - Select "Use password authentication"
+   
+   - Click **"Save"**, then **"Yes"** to apply customization settings
+   - When prompted that all existing data will be erased, click **"Yes"** to continue
+   - Wait for the OS to flash and verify (this takes a few minutes)
 
 2. **Run the `boot_pi.sh` Script for Each Node:**
 
-   - After installing the OS, remove and insert the microSD card into your computer again.
+   - After flashing the OS, remove and reinsert the microSD card into your computer.
 
-   - Add execution privileges for the script:
+   - Add execution privileges for the script (first time only):
      ```bash
      chmod +x boot_pi.sh
      ```
    
-   - Execute the `boot_pi.sh` script:
-
-      The script is designed to configure the Raspberry Pi with a unique hostname. Run the script, specifying the hostname you want to assign to the Raspberry Pi (e.g., `master`, `worker1`, `postgres`):
+   - Execute the `boot_pi.sh` script with the desired hostname:
 
       ```bash
       ./boot_pi.sh <hostname>
       ```
+      
+      Example hostnames: `master`, `worker1`, `worker2`, `postgres`
     
-This script automates the pre-boot configuration of a Raspberry Pi by setting its hostname and enabling SSH. It detects and mounts the Raspberry Pi's SD card, modifies the necessary system files to apply the hostname, and ensures SSH is enabled for remote access. After making these changes, it unmounts the disk and prompts the user to insert the SD card into the Raspberry Pi, streamlining the setup process and eliminating the need for manual configuration after boot.
+   **What this script does:**
+   - Detects and mounts the Raspberry Pi's SD card (bootfs partition)
+   - Enables SSH for remote access
+   - Creates a firstrun script that sets the hostname on first boot
+   - The Pi will automatically reboot after first boot to apply the hostname
+   
+   After the script completes, remove the microSD card and insert it into the Raspberry Pi.
 
 3. **Run the `init_host.sh` Script for Each Node:**
    
-After the above step is complete, you may remove the microSD cards and insert them into the Raspberry Pi's before turning them on. After you allow some time for them to boot and become discoverable on your local network, you may run this script.
+   After inserting the microSD card into the Raspberry Pi and powering it on, wait 2-3 minutes for the initial boot and hostname configuration (the Pi will reboot once automatically).
 
-   - Add execution privileges for the script:
+   - Add execution privileges for the script (first time only):
      ```bash
      chmod +x init_host.sh
      ```
 
    - Execute the `init_host.sh` script:
 
-     Be sure to replace the hostname parameter with a Pi that has been booted.
-
      ```bash
-     sudo ./init_host.sh <hostname>
+     ./init_host.sh <hostname>
      ```
     
-Note that you will have to provide the password you setup for Pi during the OS installation phase.
-
-This script automates the setup of secure, passwordless SSH access to a Raspberry Pi or other remote machine. It begins by verifying that a hostname is provided, then checks for an existing SSH key, generating one if necessary. The script updates the local SSH configuration to simplify future connections and offers an option to configure a public DNS hostname. 
-
-It then securely transfers the SSH key to the remote machine and configures the SSH server to disable password authentication, enhancing security. Finally, it verifies that the key transfer was successful, ensuring seamless SSH access.
+   **What this script does:**
+   - Waits for the Pi to come online (tries mDNS first, falls back to network scan)
+   - Automatically finds the Pi's IP address by scanning for Raspberry Pi devices
+   - Adds the hostname to your local `/etc/hosts` file for easy access
+   - Copies your SSH key to the Pi (you'll be prompted for the password you set in Imager)
+   - Configures SSH security: disables password authentication and enables key-only login
+   - Updates your local `~/.ssh/config` for simplified SSH access
    
-4. **Security Enhancements Included in the `init_host.sh` Script:**
+   **You will be prompted once for:**
+   - Your sudo password (to update `/etc/hosts`)
+   - The Pi's password (the one you set in Raspberry Pi Imager)
+   
+   After completion, you can connect with: `ssh <hostname>` (e.g., `ssh master`)
+   
+4. **Verify SSH Access:**
+
+   Test that you can connect without a password:
+   ```bash
+   ssh <hostname>
+   ```
+   
+   You should be logged in immediately without any password prompt.
+
+5. **Security Enhancements Included in the `init_host.sh` Script:**
 
 - SSH Key Generation: The script checks if an SSH key already exists in your home directory. If not, it generates one to facilitate secure SSH connections.
 
@@ -63,7 +106,7 @@ It then securely transfers the SSH key to the remote machine and configures the 
 
 - Limiting SSH Authentication Attempts: To mitigate brute-force attacks, the script also limits the number of authentication attempts to 3.
 
-5. **Next Steps: Configuring Ansible for Deployment:**
+6. **Next Steps: Configuring Ansible for Deployment:**
 
 Now that each Raspberry Pi is accessible by its assigned hostname, we can proceed with using Ansible for automated deployment. With passwordless SSH authentication established, Ansible can seamlessly connect to the nodes, execute tasks, and manage configurations across the cluster. The next step is to set up Ansible and use the provided playbooks for deploying and managing services on the Raspberry Pi cluster.
 
