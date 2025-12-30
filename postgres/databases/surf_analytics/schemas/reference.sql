@@ -1,1 +1,1 @@
-CREATE SCHEMA reference;
+CREATE SCHEMA IF NOT EXISTS reference;

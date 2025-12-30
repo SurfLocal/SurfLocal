@@ -24,6 +24,7 @@
 - name: Parse available partitions
   set_fact:
     largest_partition: "{{ (lsblk_output.stdout | from_json).blockdevices 
+                          | selectattr('children', 'defined')
                           | map(attribute='children') 
                           | flatten 
                           | selectattr('fsavail', 'defined') 
@@ -81,9 +82,9 @@
 
 - name: Update PostgreSQL configuration to use new data directory
   lineinfile:
-    path: /etc/postgresql/15/main/postgresql.conf
+    path: "/etc/postgresql/{{ postgresql_version_dir.stdout }}/main/postgresql.conf"
     regexp: '^data_directory ='
-    line: "data_directory = '/mnt/postgres_data/postgresql/15/main'"
+    line: "data_directory = '/mnt/postgres_data/postgresql/{{ postgresql_version_dir.stdout }}/main'"
     state: present
 
 #################################
@@ -158,3 +159,98 @@
   systemd:
     name: postgres
     state: started
+
+#################################
+# DATABASE SETUP                #
+#################################
+
+- name: Copy SQL files to remote host
+  synchronize:
+    src: "{{ playbook_dir }}/../../postgres/"
+    dest: /tmp/postgres_setup/
+    mode: push
+
+- name: Create database (surf_analytics)
+  become_user: postgres
+  shell: |
+    psql -tc "SELECT 1 FROM pg_database WHERE datname = 'surf_analytics'" | grep -q 1 || psql -c "CREATE DATABASE surf_analytics"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Create schemas
+  become_user: postgres
+  shell: |
+    psql -d surf_analytics -f /tmp/postgres_setup/databases/surf_analytics/schemas/{{ item }}
+  args:
+    executable: /bin/bash
+  loop:
+    - reference.sql
+    - ingested.sql
+  changed_when: false
+
+- name: Create users (with templated passwords)
+  become_user: postgres
+  shell: |
+    psql -d surf_analytics -c "
+    DO \$\$
+    BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ item.name }}') THEN
+            CREATE USER {{ item.name }} WITH {{ item.options }} PASSWORD '{{ item.password }}';
+        END IF;
+    END
+    \$\$;"
+  args:
+    executable: /bin/bash
+  loop:
+    - { name: 'platform_admin', options: 'LOGIN SUPERUSER', password: '{{ platform_admin_password }}' }
+    - { name: 'argo_runner', options: 'LOGIN', password: '{{ argo_runner_password }}' }
+  no_log: true
+  changed_when: false
+
+- name: Create roles
+  become_user: postgres
+  shell: |
+    psql -d surf_analytics -f /tmp/postgres_setup/roles/service_accounts/{{ item }}
+  args:
+    executable: /bin/bash
+  loop:
+    - argo_read.sql
+    - argo_write.sql
+  changed_when: false
+
+- name: Grant roles to argo_runner
+  become_user: postgres
+  shell: |
+    psql -d surf_analytics -c "GRANT argo_read TO argo_runner; GRANT argo_write TO argo_runner;"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Create reference tables (order matters - buoy_info and spot_info first)
+  become_user: postgres
+  shell: |
+    psql -d surf_analytics -f /tmp/postgres_setup/databases/surf_analytics/tables/{{ item }}
+  args:
+    executable: /bin/bash
+  loop:
+    - reference.buoy_info.sql
+    - reference.spot_info.sql
+    - reference.spot_buoy_link.sql
+  changed_when: false
+
+- name: Create ingested tables
+  become_user: postgres
+  shell: |
+    psql -d surf_analytics -f /tmp/postgres_setup/databases/surf_analytics/tables/{{ item }}
+  args:
+    executable: /bin/bash
+  loop:
+    - ingested.swell_data.sql
+    - ingested.wind_data.sql
+  changed_when: false
+
+- name: Clean up temporary SQL files
+  file:
+    path: /tmp/postgres_setup
+    state: absent

@@ -1,0 +1,6 @@
+---
+- name: Cluster dependencies
+  hosts: rpi_cluster
+  become: true
+  roles:
+    - cluster

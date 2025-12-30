@@ -1,6 +1,6 @@
 ---
 - name: Install Docker
-  hosts: all
-  become: yes
+  hosts: rpi_cluster
+  become: true
   roles:
     - docker

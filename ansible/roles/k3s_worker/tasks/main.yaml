@@ -4,11 +4,9 @@
     K3S_URL=https://{{ hostvars[groups['master_node'][0]]['ansible_host'] }}:6443 \
     K3S_TOKEN={{ hostvars[groups['master_node'][0]]['k3s_join_token'] }} \
     sh -
-  become: true
 
 - name: Enable and start k3s-agent service
   systemd:
     name: k3s-agent
     enabled: yes
     state: started
-  become: true

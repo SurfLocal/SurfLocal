@@ -2,20 +2,17 @@
 - name: Install k3s on master node
   shell: curl -sfL https://get.k3s.io | sh -s - server --cluster-init --write-kubeconfig-mode 644
   register: master_init
-  become: true
 
 - name: Enable and start k3s service
   systemd:
     name: k3s
     enabled: yes
     state: started
-  become: true
 
 - name: Get join token
   shell: cat /var/lib/rancher/k3s/server/node-token
   register: k3s_token
   changed_when: false
-  become: true
 
 - name: Set k3s_join_token fact globally
   set_fact:

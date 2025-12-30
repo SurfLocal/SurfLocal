@@ -2,5 +2,7 @@
 - name: Setup PostgreSQL Database 
   hosts: database_node
   become: true
+  vars_files:
+    - ../vars/secrets.yaml
   roles:
     - postgres

@@ -1,1 +1,1 @@
-CREATE SCHEMA ingested;
+CREATE SCHEMA IF NOT EXISTS ingested;

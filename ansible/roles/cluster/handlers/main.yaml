@@ -1,0 +1,6 @@
+- name: Reboot Raspberry Pi
+  ansible.builtin.reboot:
+    msg: "Reboot initiated by Ansible to apply kernel parameters for cgroup memory."
+    pre_reboot_delay: 10
+    post_reboot_delay: 30
+    reboot_timeout: 300
