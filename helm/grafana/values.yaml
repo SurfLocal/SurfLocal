@@ -1,0 +1,183 @@
+# ==============================================================================
+# GLOBAL CONFIGURATION
+# ==============================================================================
+global:
+  environment: prod
+  clusterDomain: cluster.local
+
+# ==============================================================================
+# METADATA
+# ==============================================================================
+metadata:
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: visualization
+    app.kubernetes.io/part-of: monitoring
+  annotations: {}
+
+# ==============================================================================
+# IMAGE CONFIGURATION
+# ==============================================================================
+image:
+  repository: grafana/grafana
+  tag: "10.2.3"
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# ==============================================================================
+# DEPLOYMENT CONFIGURATION
+# ==============================================================================
+deployment:
+  replicaCount: 1
+  strategy:
+    type: Recreate
+  restartPolicy: Always
+
+# ==============================================================================
+# RESOURCE MANAGEMENT
+# ==============================================================================
+resources:
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+  requests:
+    cpu: "250m"
+    memory: "256Mi"
+
+# ==============================================================================
+# NETWORKING
+# ==============================================================================
+service:
+  type: NodePort
+  port: 3000
+  targetPort: 3000
+  nodePort: 32000
+  protocol: TCP
+  annotations: {}
+  sessionAffinity: None
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  tls: []
+
+# ==============================================================================
+# STORAGE
+# ==============================================================================
+persistence:
+  enabled: true
+  storageClass: "local-path"
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+  existingClaim: ""
+
+# ==============================================================================
+# SECURITY
+# ==============================================================================
+securityContext:
+  pod:
+    runAsNonRoot: true
+    runAsUser: 472
+    runAsGroup: 472
+    fsGroup: 472
+  container:
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    runAsUser: 472
+    capabilities:
+      drop:
+        - ALL
+
+rbac:
+  enabled: false
+  serviceAccount:
+    create: false
+    name: ""
+    annotations: {}
+
+# ==============================================================================
+# CONFIGURATION
+# ==============================================================================
+config:
+  # Admin credentials
+  adminUser: admin
+  adminPassword: admin
+  
+  # Datasources
+  datasources:
+    - name: Prometheus
+      type: prometheus
+      url: http://prometheus.monitoring.svc.cluster.local:9090
+      access: proxy
+      isDefault: true
+      editable: false
+  
+  # Dashboard providers
+  dashboardProviders:
+    - name: default
+      orgId: 1
+      folder: ""
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards
+
+# ==============================================================================
+# DASHBOARDS
+# ==============================================================================
+dashboards:
+  # Machine metrics dashboard
+  machineMetrics:
+    enabled: true
+    title: "Raspberry Pi - Machine Metrics"
+  
+  # Kubernetes metrics dashboard
+  k8sMetrics:
+    enabled: true
+    title: "Kubernetes - Cluster Metrics"
+  
+  # PostgreSQL metrics dashboard
+  postgresMetrics:
+    enabled: true
+    title: "PostgreSQL - Database Metrics"
+
+# ==============================================================================
+# HEALTH CHECKS
+# ==============================================================================
+healthChecks:
+  liveness:
+    enabled: true
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    successThreshold: 1
+    failureThreshold: 3
+  
+  readiness:
+    enabled: true
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 3
+
+# ==============================================================================
+# SCHEDULING
+# ==============================================================================
+scheduling:
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
