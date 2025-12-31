@@ -1,0 +1,59 @@
+{
+  "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+  },
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "thresholds"
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          }
+        ]
+      },
+      "unit": "short"
+    },
+    "overrides": []
+  },
+  "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 6,
+    "y": 0
+  },
+  "id": 2,
+  "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+      "values": false,
+      "calcs": [
+        "lastNotNull"
+      ],
+      "fields": ""
+    },
+    "textMode": "auto"
+  },
+  "pluginVersion": "10.2.3",
+  "targets": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "expr": "pg_stat_database_numbackends{job=\"postgres\",datname=\"surf_analytics\"}",
+      "refId": "A"
+    }
+  ],
+  "title": "Active Connections",
+  "type": "stat"
+}

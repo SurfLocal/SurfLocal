@@ -1,0 +1,66 @@
+{
+  "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+  },
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "thresholds"
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          },
+          {
+            "color": "yellow",
+            "value": 70
+          },
+          {
+            "color": "red",
+            "value": 90
+          }
+        ]
+      },
+      "unit": "percentunit"
+    },
+    "overrides": []
+  },
+  "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 28
+  },
+  "id": 11,
+  "options": {
+    "orientation": "auto",
+    "reduceOptions": {
+      "values": false,
+      "calcs": [
+        "lastNotNull"
+      ],
+      "fields": ""
+    },
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true
+  },
+  "pluginVersion": "10.2.3",
+  "targets": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "expr": "(node_filesystem_size_bytes{job=\"raspberry-pi-nodes\",instance=\"postgres:9100\",mountpoint=\"/\"} - node_filesystem_avail_bytes{job=\"raspberry-pi-nodes\",instance=\"postgres:9100\",mountpoint=\"/\"}) / node_filesystem_size_bytes{job=\"raspberry-pi-nodes\",instance=\"postgres:9100\",mountpoint=\"/\"}",
+      "legendFormat": "Disk Usage",
+      "refId": "A"
+    }
+  ],
+  "title": "PostgreSQL Host Disk Usage",
+  "type": "gauge"
+}

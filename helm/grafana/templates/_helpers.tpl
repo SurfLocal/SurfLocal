@@ -61,3 +61,18 @@ Create the name of the service account to use
 {{- default "default" .Values.rbac.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Assemble dashboard from base and panel files
+Usage: {{ include "grafana.assembleDashboard" (dict "base" "dashboards/kubernetes/_dashboard.json" "panels" (list "dashboards/kubernetes/01-nodes-online.json" ...) "ctx" .) }}
+*/}}
+{{- define "grafana.assembleDashboard" -}}
+{{- $base := tpl (.ctx.Files.Get .base) .ctx | fromJson -}}
+{{- $panels := list -}}
+{{- range .panels -}}
+{{- $panel := tpl ($.ctx.Files.Get .) $.ctx | fromJson -}}
+{{- $panels = append $panels $panel -}}
+{{- end -}}
+{{- $_ := set $base "panels" $panels -}}
+{{- $base | toJson -}}
+{{- end }}

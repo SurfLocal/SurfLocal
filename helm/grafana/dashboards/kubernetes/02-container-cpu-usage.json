@@ -1,0 +1,57 @@
+{
+  "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+  },
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "thresholds"
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          }
+        ]
+      },
+      "unit": "short"
+    },
+    "overrides": []
+  },
+  "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 6,
+    "y": 0
+  },
+  "id": 2,
+  "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+      "values": false,
+      "calcs": ["lastNotNull"],
+      "fields": ""
+    },
+    "textMode": "auto"
+  },
+  "pluginVersion": "10.2.3",
+  "targets": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "expr": "sum(rate(container_cpu_usage_seconds_total{job=\"kubelet\",container!=\"\"}[5m]))",
+      "refId": "A"
+    }
+  ],
+  "title": "Total Container CPU Usage",
+  "type": "stat"
+}

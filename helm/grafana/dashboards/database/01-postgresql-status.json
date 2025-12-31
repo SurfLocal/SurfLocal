@@ -1,0 +1,79 @@
+{
+  "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+  },
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "thresholds"
+      },
+      "mappings": [
+        {
+          "options": {
+            "0": {
+              "color": "red",
+              "index": 0,
+              "text": "Down"
+            },
+            "1": {
+              "color": "green",
+              "index": 1,
+              "text": "Up"
+            }
+          },
+          "type": "value"
+        }
+      ],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "red",
+            "value": null
+          },
+          {
+            "color": "green",
+            "value": 1
+          }
+        ]
+      },
+      "unit": "short"
+    },
+    "overrides": []
+  },
+  "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 0,
+    "y": 0
+  },
+  "id": 1,
+  "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+      "values": false,
+      "calcs": [
+        "lastNotNull"
+      ],
+      "fields": ""
+    },
+    "textMode": "auto"
+  },
+  "pluginVersion": "10.2.3",
+  "targets": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "expr": "pg_up{job=\"postgres\"}",
+      "refId": "A"
+    }
+  ],
+  "title": "PostgreSQL Status",
+  "type": "stat"
+}

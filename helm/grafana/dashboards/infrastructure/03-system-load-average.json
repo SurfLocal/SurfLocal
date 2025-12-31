@@ -1,0 +1,108 @@
+{
+  "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+  },
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "palette-classic"
+      },
+      "custom": {
+        "axisCenteredZero": false,
+        "axisColorMode": "text",
+        "axisLabel": "",
+        "axisPlacement": "auto",
+        "barAlignment": 0,
+        "drawStyle": "line",
+        "fillOpacity": 10,
+        "gradientMode": "none",
+        "hideFrom": {
+          "tooltip": false,
+          "viz": false,
+          "legend": false
+        },
+        "lineInterpolation": "linear",
+        "lineWidth": 1,
+        "pointSize": 5,
+        "scaleDistribution": {
+          "type": "linear"
+        },
+        "showPoints": "never",
+        "spanNulls": false,
+        "stacking": {
+          "group": "A",
+          "mode": "none"
+        },
+        "thresholdsStyle": {
+          "mode": "off"
+        }
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          }
+        ]
+      },
+      "unit": "short"
+    },
+    "overrides": []
+  },
+  "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 8
+  },
+  "id": 3,
+  "options": {
+    "legend": {
+      "calcs": [
+        "last"
+      ],
+      "displayMode": "list",
+      "placement": "bottom",
+      "showLegend": true
+    },
+    "tooltip": {
+      "mode": "multi",
+      "sort": "none"
+    }
+  },
+  "pluginVersion": "10.2.3",
+  "targets": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "expr": "node_load1{job=\"raspberry-pi-nodes\"}",
+      "legendFormat": "{{`{{instance}}`}} - 1m",
+      "refId": "A"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "expr": "node_load5{job=\"raspberry-pi-nodes\"}",
+      "legendFormat": "{{`{{instance}}`}} - 5m",
+      "refId": "B"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "expr": "node_load15{job=\"raspberry-pi-nodes\"}",
+      "legendFormat": "{{`{{instance}}`}} - 15m",
+      "refId": "C"
+    }
+  ],
+  "title": "System Load Average",
+  "type": "timeseries"
+}
