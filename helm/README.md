@@ -68,6 +68,49 @@ ansible-playbook playbooks/deploy_s3_storage.yaml
 
 This mounts the largest available drive to `/mnt/ssd` on the master node for MinIO object storage.
 
+## Storage Allocation
+
+### Current Storage Usage
+
+| Deployment | Namespace | Size | Storage Class | Node Affinity |
+|------------|-----------|------|---------------|---------------|
+| MinIO | `argo` | 100Gi | `minio-storage` | Master (SSD) |
+| Prometheus | `monitoring` | 10Gi | `local-path` | Any |
+| Grafana | `monitoring` | 5Gi | `local-path` | Any |
+
+### Storage Classes
+
+- **`minio-storage`**: Manual provisioner using hostPath on master node SSD (`/mnt/ssd/minio-data`). Only MinIO uses this.
+- **`local-path`**: k3s default dynamic provisioner. Stores data on whatever node the pod runs on at `/var/lib/rancher/k3s/storage/`.
+
+### Check Available Storage
+
+**Master node SSD (MinIO):**
+```bash
+ssh pi@master "df -h /mnt/ssd"
+```
+
+**All PVs and PVCs:**
+```bash
+kubectl get pv,pvc -A
+```
+
+**Storage by node:**
+```bash
+# Check local-path storage on each node
+ansible all -m shell -a "df -h /var/lib/rancher/k3s/storage 2>/dev/null || echo 'No k3s storage'"
+```
+
+### Planning New Deployments
+
+Before adding new deployments with persistent storage:
+
+1. Check current PV/PVC usage with `kubectl get pv,pvc -A`
+2. Verify available disk space on target nodes
+3. Choose appropriate storage class:
+   - Use `minio-storage` only for MinIO (master SSD)
+   - Use `local-path` for general workloads (dynamic provisioning)
+
 ## Installation
 
 **Important**: Each chart includes a `namespace.yaml` template with Helm pre-install hooks that automatically create the required namespace.

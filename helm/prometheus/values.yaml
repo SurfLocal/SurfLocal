@@ -139,6 +139,18 @@ config:
     - jobName: postgres
       targets:
         - postgres:9187
+    
+    - jobName: kubelet
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      targets:
+        - master:10250
+        - worker1:10250
+        - worker2:10250
+        - worker3:10250
+      metricsPath: /metrics/cadvisor
 
 # ==============================================================================
 # HEALTH CHECKS

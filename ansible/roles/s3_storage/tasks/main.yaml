@@ -3,30 +3,59 @@
 # MOUNT SSD FOR S3 STORAGE      #
 #################################
 
-- name: Find the largest available drive
-  command: lsblk -b -o NAME,TYPE,SIZE,FSAVAIL,FSTYPE,MOUNTPOINT --json
+- name: Find block devices
+  command: lsblk -b -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINT --json
   register: lsblk_output
   changed_when: false
 
-- name: Parse available partitions
+- name: Parse block devices to find largest non-SD card disk
   set_fact:
-    largest_partition: "{{ (lsblk_output.stdout | from_json).blockdevices 
-                          | selectattr('children', 'defined')
-                          | map(attribute='children') 
-                          | flatten 
-                          | selectattr('fsavail', 'defined') 
-                          | selectattr('fsavail', 'ne', 'null') 
-                          | sort(attribute='fsavail', reverse=True) 
-                          | first | default({}, true) }}"
+    target_disk: "{{ (lsblk_output.stdout | from_json).blockdevices 
+                     | selectattr('type', 'equalto', 'disk')
+                     | rejectattr('name', 'match', '^mmcblk.*')
+                     | rejectattr('name', 'match', '^zram.*')
+                     | rejectattr('name', 'match', '^loop.*')
+                     | sort(attribute='size', reverse=True) 
+                     | first | default({}) }}"
 
-- name: Find largest unformatted disk if no mounted partitions found
-  set_fact:
-    largest_partition: "{{ (lsblk_output.stdout | from_json).blockdevices 
-                          | selectattr('fstype', 'equalto', null)
-                          | selectattr('type', 'equalto', 'disk')
-                          | sort(attribute='size', reverse=True) 
-                          | first | default(largest_partition, true) }}"
-  when: largest_partition.name is not defined
+- name: Display target disk info
+  debug:
+    msg: "Target disk: {{ target_disk.name | default('none') }} ({{ (target_disk.size | default(0) | int / 1073741824) | round(1) }} GB)"
+
+- name: Fail if no suitable disk found
+  fail:
+    msg: "No suitable disk found for SSD storage. Please connect an SSD via USB."
+  when: target_disk.name is not defined or target_disk.name == ''
+
+- name: Check if target partition exists
+  stat:
+    path: "/dev/{{ target_disk.name }}1"
+  register: partition_exists
+
+- name: Check if partition has filesystem
+  shell: "lsblk -no FSTYPE /dev/{{ target_disk.name }}1 2>/dev/null || true"
+  register: partition_fstype
+  changed_when: false
+  when: partition_exists.stat.exists
+
+- name: Create GPT partition table and single partition if needed
+  shell: |
+    parted -s /dev/{{ target_disk.name }} mklabel gpt
+    parted -s /dev/{{ target_disk.name }} mkpart primary ext4 0% 100%
+  when: not partition_exists.stat.exists
+
+- name: Wait for partition to be recognized
+  wait_for:
+    path: "/dev/{{ target_disk.name }}1"
+    state: present
+    timeout: 10
+  when: not partition_exists.stat.exists
+
+- name: Format the partition as ext4 if needed
+  filesystem:
+    fstype: ext4
+    dev: "/dev/{{ target_disk.name }}1"
+  when: not partition_exists.stat.exists or (partition_exists.stat.exists and partition_fstype.stdout == '')
 
 - name: Ensure SSD mount directory exists
   file:
@@ -36,32 +65,23 @@
 
 - name: Create a symlink for the device as /dev/ssd
   file:
-    src: "/dev/{{ largest_partition.name }}"
+    src: "/dev/{{ target_disk.name }}1"
     dest: /dev/ssd
     state: link
     force: yes
-  when: largest_partition.name is defined
-
-- name: Format the drive if not already formatted
-  command: "mkfs.ext4 -F /dev/{{ largest_partition.name }}"
-  when: 
-    - largest_partition.name is defined
-    - (largest_partition.fstype == "" or largest_partition.fstype is none)
 
 - name: Mount the SSD at /mnt/ssd
   mount:
     path: /mnt/ssd
-    src: "/dev/{{ largest_partition.name }}"
+    src: "/dev/{{ target_disk.name }}1"
     fstype: ext4
+    opts: defaults,noatime
     state: mounted
-  when: largest_partition.name is defined
 
-- name: Persist mount in /etc/fstab
-  lineinfile:
-    path: /etc/fstab
-    line: "/dev/ssd  /mnt/ssd  ext4  defaults,noatime  0 1"
-    state: present
-  when: largest_partition.name is defined
+- name: Persist mount in /etc/fstab using UUID
+  shell: |
+    UUID=$(blkid -s UUID -o value /dev/{{ target_disk.name }}1)
+    grep -q "$UUID" /etc/fstab || echo "UUID=$UUID  /mnt/ssd  ext4  defaults,noatime  0 2" >> /etc/fstab
 
 - name: Create MinIO data directory
   file:
@@ -77,3 +97,12 @@
     state: directory
     mode: '0777'
     recurse: yes
+
+- name: Display final storage info
+  command: "df -h /mnt/ssd"
+  register: df_output
+  changed_when: false
+
+- name: Show storage result
+  debug:
+    msg: "{{ df_output.stdout_lines }}"

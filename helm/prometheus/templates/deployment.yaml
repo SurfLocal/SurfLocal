@@ -23,6 +23,9 @@ spec:
       labels:
         {{- include "prometheus.selectorLabels" . | nindent 8 }}
     spec:
+      {{- if .Values.rbac.enabled }}
+      serviceAccountName: {{ include "prometheus.fullname" . }}
+      {{- end }}
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
