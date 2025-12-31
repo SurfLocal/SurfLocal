@@ -30,13 +30,17 @@ ansible-playbook playbooks/deploy_s3_storage.yaml
 
 ## Installation
 
-### Step 1: Install CRDs
+### Fresh Install
+
+For a brand new cluster or first-time deployment:
+
+#### Step 1: Install CRDs
 
 CRDs must be installed before the Helm chart:
 
 ```bash
 cd helm/argo-workflows
-kubectl apply -k ./crds/
+kubectl apply -k ./.crds/
 ```
 
 Verify:
@@ -53,10 +57,10 @@ workflowtemplates.argoproj.io
 clusterworkflowtemplates.argoproj.io
 ```
 
-### Step 2: Deploy Chart
+#### Step 2: Deploy Chart
 
 ```bash
-helm upgrade --install argo-workflows .
+helm upgrade --install argo-workflows . --create-namespace
 ```
 
 The chart automatically:
@@ -66,12 +70,26 @@ The chart automatically:
 - Creates MinIO buckets (via Helm hook)
 - Deploys scheduled CronWorkflows
 
+### Upgrading Existing Deployment
+
+After modifying `values.yaml` or templates:
+
+```bash
+helm upgrade argo-workflows .
+```
+
+If CRDs need updating:
+
+```bash
+kubectl apply -k ./.crds/
+```
+
 ### Custom Installation
 
 Override values:
 
 ```bash
-helm upgrade --install argo-workflows . \
+helm upgrade --install argo-workflows . --create-namespace \
   --set controller.replicaCount=2 \
   --set workflows.hourly.schedule="0 */2 * * *"
 ```
@@ -256,7 +274,7 @@ helm upgrade argo-workflows .
 2. Check PV/PVC status:
    ```bash
    kubectl get pv,pvc -n argo
-   kubectl describe pvc minio-pvc -n argo
+   kubectl describe pvc argo-workflows-minio-pvc -n argo
    ```
 
 ### Workflow Fails
@@ -291,7 +309,16 @@ helm upgrade argo-workflows .
 ### Update CRDs
 
 ```bash
-kubectl apply -k ./crds/
+kubectl apply -k ./.crds/
+```
+
+### Bucket Creator Job Already Exists
+
+If you see "job already exists" error during upgrade:
+
+```bash
+kubectl delete job -n argo -l helm.sh/hook
+helm upgrade argo-workflows .
 ```
 
 ## Uninstalling
@@ -301,10 +328,10 @@ kubectl apply -k ./crds/
 helm uninstall argo-workflows
 
 # Remove CRDs (optional)
-kubectl delete -k ./crds/
+kubectl delete -k ./.crds/
 
 # Remove PVs (optional)
-kubectl delete pv minio-pv
+kubectl delete pv argo-workflows-minio-pv
 ```
 
 ## Values Reference

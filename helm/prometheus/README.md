@@ -33,11 +33,12 @@ ansible-playbook playbooks/deploy_postgres_exporter.yaml
 
 ## Installation
 
-### Quick Start
+### Fresh Install
+
+For a brand new cluster or first-time deployment:
 
 ```bash
-cd helm/prometheus
-helm upgrade --install prometheus . -n monitoring
+helm upgrade --install prometheus ./helm/prometheus -n monitoring --create-namespace
 ```
 
 The chart automatically:
@@ -46,12 +47,20 @@ The chart automatically:
 - Creates PersistentVolume and PersistentVolumeClaim
 - Configures service for cluster access
 
+### Upgrading Existing Deployment
+
+After modifying `values.yaml` or templates:
+
+```bash
+helm upgrade prometheus ./helm/prometheus -n monitoring
+```
+
 ### Custom Installation
 
 Override values during installation:
 
 ```bash
-helm upgrade --install prometheus . -n monitoring \
+helm upgrade --install prometheus ./helm/prometheus -n monitoring --create-namespace \
   --set resources.limits.memory=4Gi \
   --set retention.time=30d
 ```

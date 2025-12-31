@@ -70,38 +70,62 @@ This mounts the largest available drive to `/mnt/ssd` on the master node for Min
 
 ## Installation
 
-**Important**: Each chart includes a `namespace.yaml` template with Helm pre-install hooks that automatically create the required namespace. You do **not** need to specify `--namespace` or `--create-namespace` flags.
+**Important**: Each chart includes a `namespace.yaml` template with Helm pre-install hooks that automatically create the required namespace.
 
-### 1. Apply Argo Workflows CRDs
+### Fresh Install
 
-CRDs must be installed separately before deploying Argo Workflows:
+For a brand new cluster or first-time deployment:
+
+#### 1. Install Argo Workflows CRDs
+
+CRDs must be installed before deploying Argo Workflows:
 
 ```bash
 cd helm/argo-workflows
-kubectl apply -k ./crds/
+kubectl apply -k ./.crds/
 ```
 
-### 2. Deploy Prometheus
+Verify CRDs are installed:
 
 ```bash
-cd helm/prometheus
-helm upgrade --install prometheus . -n monitoring
+kubectl get crds | grep argoproj.io
 ```
 
-This automatically creates the `monitoring` namespace and deploys Prometheus with all configured scrape targets.
-
-### 3. Deploy Argo Workflows
+#### 2. Deploy Prometheus
 
 ```bash
-cd ../argo-workflows
-helm upgrade --install argo-workflows .
+helm upgrade --install prometheus ./helm/prometheus -n monitoring --create-namespace
 ```
 
-This automatically creates the `argo` namespace and deploys:
+#### 3. Deploy Argo Workflows
+
+```bash
+helm upgrade --install argo-workflows ./helm/argo-workflows --create-namespace
+```
+
+This deploys:
 - Argo Workflows controller
-- MinIO object storage
+- MinIO object storage (100Gi)
 - Scheduled CronWorkflows
 - MinIO buckets (via Helm hook)
+
+### Upgrading Existing Deployments
+
+After modifying `values.yaml` or templates:
+
+```bash
+# Upgrade Prometheus
+helm upgrade prometheus ./helm/prometheus -n monitoring
+
+# Upgrade Argo Workflows
+helm upgrade argo-workflows ./helm/argo-workflows
+```
+
+If CRDs need updating:
+
+```bash
+kubectl apply -k ./helm/argo-workflows/.crds/
+```
 
 ## Accessing Services
 
@@ -165,15 +189,7 @@ helm list -A
 
 ### Upgrade a Release
 
-After modifying values or templates:
-
-```bash
-# Prometheus
-helm upgrade prometheus ./helm/prometheus -n monitoring
-
-# Argo Workflows
-helm upgrade argo-workflows ./helm/argo-workflows
-```
+See [Upgrading Existing Deployments](#upgrading-existing-deployments) above.
 
 ### Rollback a Release
 
@@ -205,7 +221,7 @@ helm uninstall argo-workflows
 CRDs are not removed by `helm uninstall`. To fully remove:
 
 ```bash
-kubectl delete -k helm/argo-workflows/crds/
+kubectl delete -k helm/argo-workflows/.crds/
 ```
 
 ## Verifying Deployments
@@ -252,8 +268,8 @@ If the MinIO PVC is stuck in `Pending` state:
 
 2. Check PV/PVC binding:
    ```bash
-   kubectl describe pv minio-pv
-   kubectl describe pvc minio-pvc -n argo
+   kubectl describe pv argo-workflows-minio-pv
+   kubectl describe pvc argo-workflows-minio-pvc -n argo
    ```
 
 ### Argo CRD Issues
@@ -261,11 +277,20 @@ If the MinIO PVC is stuck in `Pending` state:
 If workflows fail to create:
 
 ```bash
-kubectl get crds | grep argo
+kubectl get crds | grep argoproj.io
 ```
 
 Re-apply CRDs if missing:
 
 ```bash
-kubectl apply -k helm/argo-workflows/crds/
+kubectl apply -k helm/argo-workflows/.crds/
+```
+
+### Bucket Creator Job Already Exists
+
+If you see "job already exists" error during upgrade:
+
+```bash
+kubectl delete job -n argo -l helm.sh/hook
+helm upgrade argo-workflows ./helm/argo-workflows
 ```
