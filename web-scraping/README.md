@@ -1,6 +1,6 @@
-# Web Scraping Docker Images
+# Web Scraping
 
-This repository contains Dockerfiles and scripts for running web scrapers that collect surf-related data. The scrapers are built as Docker images and executed in a Kubernetes environment using Argo Workflows.
+This directory contains Docker images and scripts for automated surf data collection. The scrapers are built as multi-architecture Docker images and deployed to the Kubernetes cluster via Argo Workflows, which orchestrates scheduled execution and log management.
 
 ## Automated Docker Image Builds
 
@@ -38,9 +38,12 @@ This scraper fetches real-time wind data from the OpenWeather API. The extracted
 - Wind direction
 - Wind gusts (if available)
 
-#### Build & Run Commands
+### Manual Testing
 
-```
+To test scrapers locally:
+
+```bash
+# Build image
 docker build -f web_scraper.Dockerfile \
   --build-arg DB_HOST=<RASPBERRY_PI_IP> \
   --build-arg DB_USER=<DB_USER> \
@@ -48,18 +51,54 @@ docker build -f web_scraper.Dockerfile \
   --build-arg DB_NAME=surf_analytics \
   --build-arg API_KEY=<API_KEY> \
   --build-arg JOB_NAME=wind_scraper_hourly.py \
-  -t argo-wind-scraper-hourly:latest .
+  -t web-scraper:test .
 
-docker run --name argo-wind-scraper-hourly argo-wind-scraper-hourly:latest
+# Run locally
+docker run --rm web-scraper:test
 ```
 
-## Deployment and Secrets Management
+**Or test directly on a cluster node:**
 
-All sensitive information, such as database credentials and API keys, is securely stored in GitHub repository secrets. These secrets are automatically retrieved by the GitHub Actions workflow during the build process.
+```bash
+ssh worker1
+docker run --rm surflocally/web-scraper:prod-latest python /app/jobs/swell_scraper_hourly.py
+```
 
-## Database Configuration
+## Deployment
 
-The PostgreSQL database used for storing scraped data is hosted on a Raspberry Pi. The workflow passes the appropriate database configuration as build arguments, ensuring seamless integration during deployment.
+### Kubernetes Deployment via Argo Workflows
+
+Scrapers are deployed as CronWorkflows in the Kubernetes cluster:
+
+- **Namespace**: `argo`
+- **Schedule**: Hourly execution (`0 * * * *`)
+- **Timezone**: America/Los_Angeles
+- **Log Storage**: MinIO S3-compatible storage at `http://master:31000`
+
+**Active Workflows:**
+- `swell-scraper-hourly`: Collects NOAA buoy data every hour
+- `wind-scraper-hourly`: Fetches OpenWeather API data every hour
+
+Logs are automatically uploaded to the `argo-logs` MinIO bucket in JSON format. See the [Argo Workflows Helm chart](../helm/argo-workflows/README.md) for deployment details.
+
+### Secrets Management
+
+**Build-time secrets** (GitHub Actions):
+- Database credentials and API keys are stored in GitHub repository secrets
+- Automatically injected during Docker image builds
+
+**Runtime secrets** (Kubernetes):
+- Database connection details configured in Argo Workflow templates
+- MinIO credentials stored in Kubernetes secrets
+- API keys passed as environment variables to workflow pods
+
+### Database Configuration
+
+The PostgreSQL database is hosted on a dedicated Raspberry Pi node:
+- **Host**: `postgres` (resolved via CoreDNS)
+- **Database**: `surf_analytics`
+- **Connection**: Configured in Argo Workflow templates
+- **Monitoring**: PostgreSQL Exporter provides metrics to Prometheus
 
 ## Testing
 

@@ -66,64 +66,75 @@ worker3 | SUCCESS => {
    ansible-playbook playbooks/site.yaml
    ```
 
-## Playbook Breakdown
+## Available Playbooks
 
-### 1. Docker Installation
+The following playbooks are available in the `playbooks/` directory:
 
-This section installs Docker and configures the system to allow the user to manage Docker without requiring `sudo`:
+| Playbook | Description |
+|----------|-------------|
+| `site.yaml` | Main playbook that orchestrates all deployments |
+| `deploy_cluster.yaml` | Sets up the complete Kubernetes cluster |
+| `deploy_common.yaml` | Installs common dependencies and updates packages |
+| `deploy_docker.yaml` | Installs Docker CE on all nodes |
+| `deploy_helm.yaml` | Installs Helm package manager on master node |
+| `deploy_kubernetes.yaml` | Deploys K3s master and worker nodes |
+| `deploy_node_exporter.yaml` | Installs Prometheus Node Exporter for metrics |
+| `deploy_noip.yaml` | Configures No-IP Dynamic DNS client |
+| `deploy_postgres.yaml` | Installs and configures PostgreSQL database |
+| `deploy_postgres_exporter.yaml` | Installs PostgreSQL Exporter for Prometheus |
+| `deploy_coredns.yaml` | Configures CoreDNS for cluster hostname resolution |
+| `deploy_s3_storage.yaml` | Mounts SSD storage for MinIO S3 on master node |
 
-- Adds the Docker GPG key.
-- Adds the Docker APT repository for ARM64 architecture.
-- Installs the following Docker-related packages:
-  - `docker-ce` (Docker Community Edition)
-  - `docker-ce-cli` (Docker command-line interface)
-  - `containerd.io` (Containerd container runtime)
-- Adds the user to the Docker group to allow Docker management without root permissions.
+## Roles
 
-### 2. Helm Installation
+Each playbook uses modular roles located in the `roles/` directory:
 
-This section automates the installation of Helm 3 (a package manager for Kubernetes):
+- **cluster**: Kubernetes cluster initialization and configuration
+- **common**: System updates and common package installation
+- **coredns**: CoreDNS configuration for hostname resolution
+- **docker**: Docker CE installation and user configuration
+- **helm**: Helm 3 installation
+- **k3s_master**: K3s master node setup
+- **k3s_worker**: K3s worker node configuration
+- **node_exporter**: Prometheus Node Exporter installation
+- **noip**: No-IP Dynamic DNS client setup
+- **postgres**: PostgreSQL installation with custom data directory
+- **postgres_exporter**: PostgreSQL Exporter for Prometheus monitoring
+- **s3_storage**: SSD storage mounting for MinIO
 
-- Downloads the Helm installation script.
-- Executes the script to install Helm 3 on the system.
+## Playbook Details
 
-### 3. K3s Installation
+### Docker Installation (`deploy_docker.yaml`)
 
-This section sets up K3s, a lightweight Kubernetes distribution:
+- Adds Docker GPG key and APT repository for ARM64
+- Installs `docker-ce`, `docker-ce-cli`, and `containerd.io`
+- Adds user to Docker group for sudo-less management
 
-- Installs K3s on the master node and initializes the Kubernetes cluster.
-- Retrieves the K3s join token and stores it for use on worker nodes.
-- Configures worker nodes to join the K3s cluster using the join token.
-- Fetches and updates the kubeconfig file to ensure proper access to the Kubernetes cluster from the local machine.
+### Kubernetes Setup (`deploy_kubernetes.yaml`)
 
-### 4. Node Exporter Installation
+- Installs K3s on master node and initializes cluster
+- Retrieves join token for worker nodes
+- Configures worker nodes to join the cluster
+- Updates local kubeconfig for cluster access
 
-This section installs Prometheus Node Exporter to collect system metrics:
+### PostgreSQL Setup (`deploy_postgres.yaml`)
 
-- Downloads and extracts Node Exporter.
-- Moves the Node Exporter binary to `/usr/local/bin`.
-- Creates a systemd service for Node Exporter to ensure it runs on system startup.
-- Starts and enables the Node Exporter service for continuous system monitoring.
+- Installs PostgreSQL on dedicated database node
+- Mounts largest available drive to `/mnt/postgres_data`
+- Configures `postgresql.conf` and `pg_hba.conf` for cluster access
+- Sets up peer authentication for local access
+- Creates custom systemd service for PostgreSQL
 
-### 5. No-IP DUC Installation
+### Monitoring Setup
 
-This section sets up the No-IP Dynamic Update Client (DUC), which updates DNS records based on the changing IP address of the machine:
+- **Node Exporter** (`deploy_node_exporter.yaml`): Collects system metrics on all nodes
+- **PostgreSQL Exporter** (`deploy_postgres_exporter.yaml`): Exports PostgreSQL metrics for Prometheus
 
-- Downloads the No-IP DUC package.
-- Extracts and installs the package.
-- Creates a systemd service for the No-IP DUC to keep the DNS updated automatically.
-- Ensures the No-IP DUC service starts on boot.
+### CoreDNS Configuration (`deploy_coredns.yaml`)
 
-### 6. PostgreSQL Installation and Configuration
-
-This section automates the installation and configuration of PostgreSQL:
-
-- Installs PostgreSQL and identifies the correct version directory.
-- Finds the largest available drive and mounts it to `/mnt/postgres_data` for PostgreSQL data storage.
-- Updates PostgreSQL configuration files to use the new data directory.
-- Modifies PostgreSQL's `pg_hba.conf` file to allow connections from the master and worker nodes.
-- Creates a custom systemd service for PostgreSQL to ensure it runs correctly on boot.
-- Restarts and enables the PostgreSQL service.
+- Configures CoreDNS to resolve cluster hostnames
+- Enables Kubernetes pods to resolve `master`, `worker1-3`, and `postgres` hostnames
+- Essential for Prometheus scrape targets and inter-service communication
 
 ## Verification
 

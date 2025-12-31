@@ -22,37 +22,47 @@ By following these guidelines, you'll help us maintain a consistent development 
 
 ```
 SurfLocal/
-├── ansible/
+├── ansible/                    # Infrastructure automation
 │   ├── ansible.cfg
-│   ├── hosts
+│   ├── hosts                   # Inventory file
 │   ├── playbooks/
-│   │   ├── deploy_docker.yml
-│   │   ├── deploy_helm.yml
-│   │   ├── deploy_kubernetes.yml
-│   │   ├── deploy_node_exporter.yml
-│   │   └── site.yml
-│   └── roles/
-│       └── ...
-├── helm/
-│   ├── grafana/
-│   │   ├── Chart.yaml
+│   │   ├── deploy_cluster.yaml
+│   │   ├── deploy_common.yaml
+│   │   ├── deploy_coredns.yaml
+│   │   ├── deploy_docker.yaml
+│   │   ├── deploy_helm.yaml
+│   │   ├── deploy_kubernetes.yaml
+│   │   ├── deploy_node_exporter.yaml
+│   │   ├── deploy_noip.yaml
+│   │   ├── deploy_postgres.yaml
+│   │   ├── deploy_postgres_exporter.yaml
+│   │   ├── deploy_s3_storage.yaml
+│   │   └── site.yaml
+│   ├── roles/                  # Ansible roles for each service
+│   └── vars/                   # Variable files
+├── helm/                       # Kubernetes application deployments
+│   ├── STANDARDS.md           # Helm chart conventions
+│   ├── argo-workflows/        # Workflow orchestration
+│   │   ├── .crds/            # Custom Resource Definitions
+│   │   ├── charts/minio/     # MinIO subchart for S3 storage
+│   │   ├── templates/
 │   │   ├── values.yaml
-│   │   └── templates/
-│   └── prometheus/
-│       ├── Chart.yaml
+│   │   └── Chart.yaml
+│   └── prometheus/            # Monitoring and metrics
+│       ├── templates/
 │       ├── values.yaml
-│       └── templates/
-├── postgres/
+│       └── Chart.yaml
+├── networking/                 # Network setup scripts
+│   ├── boot_pi.sh
+│   └── init_host.sh
+├── postgres/                   # Database configuration
+│   ├── databases/
 │   ├── roles/
-│   ├── schemas/
-│   ├── tables/
-│   ├── users/
-│   └── database.sql
-├── web-scraping/
+│   └── users/
+├── web-scraping/              # Data collection jobs
 │   ├── jobs/
-│   └── webscraper.Dockerfile
-├── setup_node.sh
-├── init_ansible.sh
+│   ├── Dockerfile
+│   └── requirements.txt
 └── README.md
 ```
 
@@ -84,7 +94,14 @@ Finally, PostgreSQL is installed and configured to run with its data directory s
 
 #### Helm Deployments
 
-Once the infrastructure for Kubernetes and PostgreSQL is set up, applications and workflows are managed and deployed to the cluster using Helm. Helm simplifies the deployment process by providing a consistent, repeatable way to manage Kubernetes applications. It is used to control Argo workflows for orchestrating and automating tasks, Grafana and Prometheus for monitoring and visualization, and MinIO for S3-compatible log storage. Additionally, Helm manages the deployment of the frontend application in the development environment.
+Once the infrastructure for Kubernetes and PostgreSQL is set up, applications and workflows are managed and deployed to the cluster using Helm. Helm simplifies the deployment process by providing a consistent, repeatable way to manage Kubernetes applications.
+
+**Current Deployments:**
+- **Argo Workflows**: Orchestrates scheduled data scraping jobs (hourly swell and wind data collection)
+- **MinIO**: S3-compatible object storage for workflow logs and artifacts (100Gi SSD storage)
+- **Prometheus**: Metrics collection and monitoring for all cluster nodes and PostgreSQL database
+
+All Helm charts follow standardized conventions documented in `helm/STANDARDS.md`, ensuring consistent structure, proper templating, and maintainability. See the [Helm README](helm/README.md) for detailed deployment instructions.
 
 ### Install Dependencies
 
