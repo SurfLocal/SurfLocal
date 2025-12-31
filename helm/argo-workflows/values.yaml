@@ -1,32 +1,82 @@
-namespace: argo
+# ==============================================================================
+# GLOBAL CONFIGURATION
+# ==============================================================================
+global:
+  environment: prod
+  clusterDomain: cluster.local
 
-replicaCount:
-  controller: 1
-  server: 1
+# ==============================================================================
+# METADATA
+# ==============================================================================
+metadata:
+  namespace: argo
+  labels:
+    app.kubernetes.io/name: argo-workflows
+    app.kubernetes.io/component: workflow-engine
+    app.kubernetes.io/part-of: cicd
+  annotations: {}
 
-image:
-  controller: "argoproj/workflow-controller:latest"
-
-resources:
-  controller:
+# ==============================================================================
+# CONTROLLER CONFIGURATION
+# ==============================================================================
+controller:
+  image:
+    repository: argoproj/workflow-controller
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  replicaCount: 1
+  
+  resources:
     limits:
       cpu: "500m"
       memory: "512Mi"
     requests:
       cpu: "250m"
       memory: "256Mi"
+  
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
 
-hourlyWorkflows:
-  enabled: true
-  schedules: "0 * * * *"
-  image: surflocally/web-scraper:prod-latest
-  jobs:
-    - swell-scraper-hourly
-    - wind-scraper-hourly
+# ==============================================================================
+# SCHEDULED WORKFLOWS
+# ==============================================================================
+workflows:
+  # Hourly web scraping workflows
+  hourly:
+    enabled: true
+    schedule: "0 * * * *"
+    timezone: "America/Los_Angeles"
+    
+    image:
+      repository: surflocally/web-scraper
+      tag: prod-latest
+      pullPolicy: IfNotPresent
+    
+    jobs:
+      - name: swell-scraper-hourly
+        enabled: true
+      - name: wind-scraper-hourly
+        enabled: true
+    
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+      requests:
+        cpu: "250m"
+        memory: "256Mi"
 
-# MinIO bucket configuration
+# ==============================================================================
+# MINIO CONFIGURATION
+# ==============================================================================
 minio:
+  enabled: true
+  
   ports:
     nodeApi: 31000
+  
   buckets:
     - argo-logs

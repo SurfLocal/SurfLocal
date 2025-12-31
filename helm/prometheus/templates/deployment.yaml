@@ -1,25 +1,83 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: prometheus
-  namespace: monitoring
+  name: {{ include "prometheus.fullname" . }}
+  namespace: {{ .Values.metadata.namespace }}
+  labels:
+    {{- include "prometheus.labels" . | nindent 4 }}
+  {{- with .Values.metadata.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.deployment.replicaCount }}
+  {{- with .Values.deployment.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
-      app: prometheus
+      {{- include "prometheus.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: prometheus
+        {{- include "prometheus.selectorLabels" . | nindent 8 }}
     spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.securityContext.pod }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduling.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduling.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduling.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - name: prometheus
-        image: prom/prometheus:latest
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- with .Values.securityContext.container }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         args:
         - "--config.file=/etc/prometheus/prometheus.yml"
+        - "--storage.tsdb.path=/prometheus"
+        {{- if .Values.retention.time }}
+        - "--storage.tsdb.retention.time={{ .Values.retention.time }}"
+        {{- end }}
+        {{- if .Values.retention.size }}
+        - "--storage.tsdb.retention.size={{ .Values.retention.size }}"
+        {{- end }}
         ports:
-        - containerPort: 9090
+        {{- range .Values.service.ports }}
+        - name: {{ .name }}
+          containerPort: {{ .targetPort }}
+          protocol: {{ .protocol }}
+        {{- end }}
+        {{- if .Values.healthChecks.liveness.enabled }}
+        livenessProbe:
+          {{- omit .Values.healthChecks.liveness "enabled" | toYaml | nindent 10 }}
+        {{- end }}
+        {{- if .Values.healthChecks.readiness.enabled }}
+        readinessProbe:
+          {{- omit .Values.healthChecks.readiness "enabled" | toYaml | nindent 10 }}
+        {{- end }}
+        {{- with .Values.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         volumeMounts:
         - name: prometheus-storage
           mountPath: /prometheus
@@ -27,8 +85,13 @@ spec:
           mountPath: /etc/prometheus
       volumes:
       - name: prometheus-storage
+        {{- if .Values.persistence.existingClaim }}
         persistentVolumeClaim:
-          claimName: prometheus-pvc
+          claimName: {{ .Values.persistence.existingClaim }}
+        {{- else }}
+        persistentVolumeClaim:
+          claimName: {{ include "prometheus.fullname" . }}
+        {{- end }}
       - name: prometheus-config
         configMap:
-          name: prometheus-config
+          name: {{ include "prometheus.fullname" . }}-config

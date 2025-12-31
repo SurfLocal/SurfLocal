@@ -1,125 +1,412 @@
-# Mounting an SSD to the Master Node for MinIO Storage
+# MinIO Helm Chart
 
-This guide will walk you through the steps to mount an SSD to your master node and configure Kubernetes to use it for MinIO's persistent storage. The goal is to have MinIO store its data on the external SSD, which is exclusively mounted on the master node for optimized storage.
+MinIO object storage for Argo Workflows artifact repository in the SurfLocal Kubernetes cluster.
 
-## Mount the SSD to the Master Node
+## Overview
 
-Before configuring Kubernetes, we need to mount the SSD to the master node. This is something that likely could be automated via Ansible, but can easily be done manually since it is only for one node.
+This chart deploys MinIO with:
+- S3-compatible object storage for Argo Workflows artifacts
+- Persistent storage on SSD mounted to master node
+- NodePort service for external access
+- Automated bucket creation for workflow logs
+- Health checks and resource management
 
-### Steps:
+## Prerequisites
 
-**1. Connect the SSD to your Master Node:**
+1. **Kubernetes cluster running** (k3s)
+2. **Helm 3.x installed**
+3. **SSD storage configured** on master node via Ansible
 
-- Physically connect your SSD to the master node (via USB, SATA, or other connections).
+### Configure S3 Storage via Ansible
 
-**2. Identify the SSD:**
+The SSD storage for MinIO is automatically configured using Ansible. The playbook handles:
+- Detecting the largest available drive
+- Formatting and mounting the drive to `/mnt/ssd`
+- Creating the MinIO data directory at `/mnt/ssd/minio-data`
+- Setting appropriate permissions
+- Persisting the mount in `/etc/fstab`
 
-- SSH into your master node and run the following command to list all connected disks:
-    ```bash
-    lsblk
-    ```
-- Identify your SSD device, typically named `/dev/sdX` (replace `X` with the correct letter).
+**Deploy S3 storage:**
 
-**3. Create a Partition and Format the SSD (if not already done):**
+```bash
+cd ../../ansible
 
-- Create a partition on the SSD:
-    ```bash
-    sudo fdisk /dev/sdX
-    ```
-- Format the partition with ext4 or another filesystem:
-    ```bash
-    sudo mkfs.ext4 /dev/sdX1  # Replace /dev/sdX1 with your SSD partition
-    ```
+# Run the S3 storage playbook on master node
+ansible-playbook playbooks/deploy_s3_storage.yaml
+```
 
-**4. Mount the SSD to a Directory:**
+**What the Ansible playbook does:**
 
-- Create a directory where you want to mount the SSD:
-    ```bash
-    sudo mkdir -p /mnt/minio-data
-    ```
-- Mount the SSD to the directory:
-    ```bash
-    sudo mount /dev/sdX1 /mnt/minio-data
-    ```
+1. **Finds the largest available drive** - Automatically detects the best storage device
+2. **Creates mount point** - Sets up `/mnt/ssd` directory
+3. **Formats the drive** - Uses ext4 filesystem if not already formatted
+4. **Mounts the drive** - Mounts to `/mnt/ssd` with optimized options (`noatime`)
+5. **Creates symlink** - Links device to `/dev/ssd` for easier reference
+6. **Persists configuration** - Adds entry to `/etc/fstab` for automatic mounting on reboot
+7. **Creates MinIO directory** - Sets up `/mnt/ssd/minio-data` with proper permissions
 
-**5. Make the Mount Persistent:**
+See `@/Users/robronayne/Desktop/Git/SurfLocal/ansible/roles/s3_storage/tasks/main.yaml` for implementation details.
 
-- Add the mount entry to `/etc/fstab` to ensure the SSD is remounted automatically after a reboot:
-    ```bash
-    sudo nano /etc/fstab
-    ```
-- Add the following line:
-    ```bash
-    /dev/sdX1  /mnt/minio-data  ext4  defaults  0  2
-    ```
+## Installation
 
-## Why Configure Storage Exclusively on One Node?
+### Quick Start
 
-There are several reasons why you might want to configure MinIO storage exclusively on the master node with an external SSD:
+```bash
+cd helm/argo-workflows/charts/minio
+helm upgrade --install minio . -n argo --create-namespace
+```
 
-### **Dedicated Storage:**
+The chart automatically:
+- Creates the `argo` namespace
+- Deploys MinIO server with S3 API
+- Creates PersistentVolume and PersistentVolumeClaim
+- Configures NodePort service for external access
+- Sets up credentials for authentication
 
-- The SSD provides dedicated, high-performance storage for MinIO. Using a master node with exclusive access to the external drive ensures that this storage is always available and optimized for MinIO's data needs.
+### Custom Installation
 
-### **Improved Performance:**
+Override values during installation:
 
-- SSDs offer much faster read/write speeds compared to standard hard drives or network-based storage. By using the master node with a local SSD, you reduce the overhead of network I/O, which can significantly improve MinIO’s performance.
+```bash
+helm upgrade --install minio . -n argo \
+  --set resources.limits.memory=4Gi \
+  --set persistence.size=200Gi
+```
 
-### **High Availability Considerations:**
+## Configuration
 
-- While it's common to configure distributed storage across multiple nodes in a Kubernetes cluster, for MinIO (especially in testing or small environments), it might be desirable to use a single-node configuration. This simplifies the setup and reduces complexity for specific use cases, like object storage where high availability isn't yet a concern.
+### Storage Configuration
 
-### **Master Node as a Dedicated Resource:**
+```yaml
+persistence:
+  enabled: true
+  size: 100Gi
+  storageClass: "minio-storage"
+  persistentVolume:
+    enabled: true
+    hostPath: "/mnt/ssd/minio-data"
+    nodeAffinity:
+      required:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                  - master
+```
 
-- In Kubernetes, the master node typically handles cluster management and is not used for running regular workloads. By dedicating the master node’s resources (including storage) to MinIO, you free up other nodes for regular workloads, balancing the cluster's resource utilization.
+### Resource Limits
+
+```yaml
+resources:
+  limits:
+    cpu: "1000m"
+    memory: "2Gi"
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+```
+
+### Service Configuration
+
+```yaml
+service:
+  type: NodePort
+  ports:
+    - name: api
+      port: 9000
+      nodePort: 31000
+    - name: console
+      port: 9001
+      nodePort: 31001
+```
+
+## Verification
+
+### Check Deployment Status
+
+```bash
+# Check pods
+kubectl get pods -n argo
+
+# Check services
+kubectl get svc -n argo
+
+# Check PV/PVC
+kubectl get pv,pvc -n argo
+```
+
+### Verify Storage Mount
+
+```bash
+# SSH to master node and check mount
+ssh master 'df -h | grep minio'
+```
+
+## Accessing MinIO
+
+### MinIO Console (Web UI)
+
+**Port-forward method:**
+
+```bash
+kubectl port-forward -n argo svc/minio 9001:9001
+```
+
+Then visit: http://localhost:9001
+
+**Direct access via NodePort:**
+
+```
+http://<master-node-ip>:31001
+```
+
+**Login credentials:**
+- Access Key: `admin`
+- Secret Key: `fidelio!`
+
+### MinIO API (S3)
+
+**Port-forward method:**
+
+```bash
+kubectl port-forward -n argo svc/minio 9000:9000
+```
+
+**Direct access via NodePort:**
+
+```
+http://<master-node-ip>:31000
+```
+
+### Internal Cluster Access
+
+From within the cluster:
+```
+http://minio.argo.svc.cluster.local:9000
+```
+
+## Usage Examples
+
+### Configure AWS CLI for MinIO
+
+```bash
+aws configure --profile minio
+# AWS Access Key ID: admin
+# AWS Secret Access Key: fidelio!
+# Default region name: us-east-1
+# Default output format: json
+
+# Set endpoint
+export AWS_ENDPOINT_URL=http://localhost:9000
+```
+
+### List Buckets
+
+```bash
+aws --profile minio --endpoint-url http://localhost:9000 s3 ls
+```
+
+### Upload File
+
+```bash
+aws --profile minio --endpoint-url http://localhost:9000 s3 cp file.txt s3://argo-logs/
+```
+
+### Download File
+
+```bash
+aws --profile minio --endpoint-url http://localhost:9000 s3 cp s3://argo-logs/file.txt .
+```
+
+## Why Configure Storage on Master Node?
+
+### **Dedicated Storage**
+The SSD provides dedicated, high-performance storage for MinIO. Using the master node with exclusive access ensures storage is always available and optimized.
+
+### **Improved Performance**
+SSDs offer faster read/write speeds compared to standard drives or network storage. Local SSD reduces network I/O overhead, significantly improving MinIO performance.
+
+### **Simplified Architecture**
+For small clusters and testing environments, single-node storage simplifies setup and reduces complexity while maintaining good performance.
+
+### **Resource Optimization**
+The master node handles cluster management and is ideal for dedicated services like MinIO, freeing worker nodes for application workloads.
 
 ---
 
-# Logging Configuration for MinIO
+## Argo Workflows Integration
 
-In the current setup, logs are being stored in MinIO and organized by prefixes based on the job name, date, and time (in UTC). The logs are being sent to the `argo-logs` bucket. The log path is dynamically generated by the Python code in the scraping scripts.
+### Logging Configuration
 
-## How Logs Are Stored:
+Argo Workflows logs are stored in MinIO and organized by job name, date, and time (UTC). Logs are sent to the `argo-logs` bucket with paths dynamically generated by workflow scripts.
 
-The log path is structured with the following components:
-* `job_name`: The name of the job (e.g., "example-job").
-* `date_str`: The date in `MM-DD-YYYY` format (e.g., "03-18-2025").
-* `time_str`: The time in `HH-MM` format (e.g., "14-30").
+**Log path structure:**
 
-### UTC Timestamps:
-
-The timestamps used for the logs are in UTC. So, when the log path is generated, it reflects the UTC date and time at the moment the log is created.
-
-The resulting log path will look something like:
-
-```bash
-argo-logs/example-job/03-18-2025/14-30.log
+```
+argo-logs/<job_name>/<MM-DD-YYYY>/<HH-MM>.log
 ```
 
-### Example:
-If the job name is `data-processing`, and the log is being generated on March 18, 2025, at 2:30 PM UTC, the log path will be:
+**Components:**
+- `job_name`: Workflow job name (e.g., "swell-scraper")
+- `date_str`: Date in `MM-DD-YYYY` format (e.g., "03-18-2025")
+- `time_str`: Time in `HH-MM` format (e.g., "14-30")
 
-```bash
-argo-logs/data-processing/03-18-2025/14-30.log
+**Example:**
+
+```
+argo-logs/swell-scraper/03-18-2025/14-30.log
+argo-logs/wind-scraper/03-18-2025/14-30.log
 ```
 
-This structure allows for organized and easy retrieval of logs, ensuring that logs are stored in separate directories based on both job name and timestamp in UTC.
+All timestamps are in UTC for consistency across the cluster.
 
-## Accessing Logs in the MinIO Bucket via the MinIO UI
-To access the logs stored in the MinIO bucket via the MinIO UI, follow these steps:
+### Accessing Workflow Logs
 
-### Step 1: Port Forward the MinIO Service
-You need to port-forward the MinIO service to access the MinIO UI locally. Run the following command to forward port 9001:
+**Via MinIO Console:**
+
+1. Port-forward the MinIO service:
+   ```bash
+   kubectl port-forward -n argo svc/minio 9001:9001
+   ```
+
+2. Open browser to http://localhost:9001
+
+3. Login with credentials (admin/fidelio!)
+
+4. Navigate to `argo-logs` bucket
+
+5. Browse logs by job name → date → time
+
+**Via AWS CLI:**
 
 ```bash
-kubectl port-forward svc/minio 9001:9001 -n argo
+# List all logs for a specific job
+aws --profile minio --endpoint-url http://localhost:9000 s3 ls s3://argo-logs/swell-scraper/ --recursive
+
+# Download specific log
+aws --profile minio --endpoint-url http://localhost:9000 s3 cp s3://argo-logs/swell-scraper/03-18-2025/14-30.log .
 ```
 
-This will forward the MinIO UI to localhost:9001.
+## Upgrading
 
-### Step 2: Access the MinIO UI
+### Update Configuration
 
-Open a web browser and navigate to http://localhost:9001. This will load the MinIO web UI. Login using the credentials specified at time of deployment in the `secret.yaml` file.
+Modify `values.yaml` and upgrade:
 
-### Step 3: Navigate to the argo-logs Bucket
-Once logged in, you can browse the `argo-logs` bucket. Here, you will find the logs organized by the job name, date, and time, as described in the Logging Configuration section.
+```bash
+helm upgrade minio . -n argo
+```
+
+### Increase Storage Size
+
+Edit `values.yaml`:
+
+```yaml
+persistence:
+  size: 200Gi
+```
+
+Then upgrade:
+
+```bash
+helm upgrade minio . -n argo
+```
+
+Note: You may need to manually resize the PV and underlying storage.
+
+## Troubleshooting
+
+### Pod Not Starting
+
+1. Check pod status:
+   ```bash
+   kubectl describe pod -n argo -l app.kubernetes.io/name=minio
+   ```
+
+2. Verify storage mount on master node:
+   ```bash
+   ssh master 'ls -la /mnt/ssd/minio-data'
+   ```
+
+3. Check PV/PVC binding:
+   ```bash
+   kubectl get pv,pvc -n argo
+   ```
+
+### Storage Not Mounting
+
+1. Verify Ansible playbook ran successfully:
+   ```bash
+   ssh master 'df -h | grep /mnt/ssd'
+   ```
+
+2. Re-run Ansible if needed:
+   ```bash
+   cd ../../ansible
+   ansible-playbook playbooks/deploy_s3_storage.yaml
+   ```
+
+3. Check node affinity matches:
+   ```bash
+   kubectl get nodes --show-labels | grep hostname
+   ```
+
+### Cannot Access Console
+
+1. Verify service is running:
+   ```bash
+   kubectl get svc -n argo minio
+   ```
+
+2. Check NodePort is accessible:
+   ```bash
+   curl http://<master-ip>:31001
+   ```
+
+3. Verify credentials in secret:
+   ```bash
+   kubectl get secret -n argo minio-creds -o yaml
+   ```
+
+## Uninstalling
+
+```bash
+helm uninstall minio -n argo
+```
+
+**Note:** PVs and storage data are not automatically deleted. To remove:
+
+```bash
+# Delete PV
+kubectl delete pv minio-pv
+
+# Delete storage class
+kubectl delete storageclass minio-storage
+
+# Manually clean data on master node (optional)
+ssh master 'sudo rm -rf /mnt/ssd/minio-data/*'
+```
+
+## Values Reference
+
+### Key Configuration Options
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `metadata.namespace` | Namespace for deployment | `argo` |
+| `deployment.replicaCount` | Number of replicas | `1` |
+| `resources.limits.memory` | Memory limit | `2Gi` |
+| `resources.limits.cpu` | CPU limit | `1000m` |
+| `persistence.size` | Storage size | `100Gi` |
+| `persistence.storageClass` | Storage class name | `minio-storage` |
+| `service.type` | Service type | `NodePort` |
+| `credentials.accessKey` | MinIO access key | `admin` |
+| `credentials.secretKey` | MinIO secret key | `fidelio!` |
+
+## Related Documentation
+
+- [Helm Chart Standards](../../STANDARDS.md)
+- [Argo Workflows Chart](../../README.md)
+- [MinIO Documentation](https://min.io/docs/minio/kubernetes/upstream/)
+- [Ansible S3 Storage Role](../../../ansible/roles/s3_storage/)

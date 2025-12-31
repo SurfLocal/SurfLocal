@@ -1,0 +1,41 @@
+Thank you for installing {{ .Chart.Name }}.
+
+Your release is named {{ .Release.Name }}.
+
+To learn more about the release, try:
+
+  $ helm status {{ .Release.Name }}
+  $ helm get all {{ .Release.Name }}
+
+Argo Workflows has been deployed with the following configuration:
+
+  Namespace: {{ .Values.metadata.namespace }}
+  Controller Replicas: {{ .Values.controller.replicaCount }}
+
+Scheduled Workflows:
+{{- if .Values.workflows.hourly.enabled }}
+  Hourly Workflows ({{ .Values.workflows.hourly.schedule }}):
+  {{- range .Values.workflows.hourly.jobs }}
+  {{- if .enabled }}
+    - {{ .name }}
+  {{- end }}
+  {{- end }}
+{{- end }}
+
+{{- if .Values.minio.enabled }}
+MinIO Buckets:
+  {{- range .Values.minio.buckets }}
+  - {{ . }}
+  {{- end }}
+{{- end }}
+
+To view workflows:
+
+  kubectl get workflows -n {{ .Values.metadata.namespace }}
+  kubectl get cronworkflows -n {{ .Values.metadata.namespace }}
+
+To view workflow logs:
+
+  argo logs -n {{ .Values.metadata.namespace }} <workflow-name>
+
+For more information, visit: https://argoproj.github.io/argo-workflows/

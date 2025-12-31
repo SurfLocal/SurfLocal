@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: monitoring
+  name: {{ .Values.metadata.namespace }}
   labels:
-    name: monitoring
-    purpose: observability
+    {{- include "prometheus.labels" . | nindent 4 }}
+    name: {{ .Values.metadata.namespace }}
   annotations:
     "helm.sh/hook": pre-install
     "helm.sh/hook-weight": "-10"

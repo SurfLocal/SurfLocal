@@ -2,47 +2,53 @@
 
 This directory contains Helm charts for deploying services to the SurfLocal Kubernetes cluster.
 
-## Chart Structure
+## Documentation
 
-```
-helm/
-├── README.md
-├── argo-workflows/
-│   ├── Chart.yaml
-│   ├── values.yaml
-│   ├── crds/                    # Argo CRDs
-│   ├── templates/
-│   │   ├── namespace.yaml       # Argo namespace
-│   │   ├── configmap.yaml       # Workflow controller config
-│   │   ├── controller.yaml      # Argo controller deployment
-│   │   ├── rbac.yaml            # Service accounts and roles
-│   │   └── workflows/           # CronWorkflow definitions
-│   └── charts/
-│       └── minio/               # MinIO subchart
-│           ├── templates/
-│           │   ├── deployment.yaml
-│           │   ├── secret.yaml
-│           │   └── storage.yaml
-│           └── values.yaml
-└── prometheus/
-    ├── Chart.yaml
-    ├── values.yaml
-    └── templates/
-        ├── namespace.yaml       # Monitoring namespace
-        ├── config.yaml          # Prometheus scrape config
-        ├── deployment.yaml
-        ├── pv.yaml
-        ├── pvc.yaml
-        └── service.yaml
-```
+- **[STANDARDS.md](./STANDARDS.md)** - Helm chart standardization guide and conventions
+- **[Prometheus Chart](./prometheus/README.md)** - Monitoring and metrics collection
+- **[Argo Workflows Chart](./argo-workflows/README.md)** - Workflow orchestration and scheduling
 
-## Services Overview
+## Quick Links
 
-| Service | Namespace | Description | Access |
-|---------|-----------|-------------|--------|
-| **Argo Workflows** | `argo` | Workflow orchestration for scheduled data scraping jobs | Internal only |
-| **MinIO** | `argo` | S3-compatible object storage for workflow artifacts and logs | `http://<master-ip>:31000` (API), `http://<master-ip>:31001` (Console) |
-| **Prometheus** | `monitoring` | Metrics collection and monitoring | `http://<any-node-ip>:9090` |
+- [Installation](#installation)
+- [Accessing Services](#accessing-services)
+- [Managing Releases](#managing-releases)
+- [Troubleshooting](#troubleshooting)
+
+## Available Charts
+
+### Prometheus
+**Namespace:** `monitoring`  
+**Description:** Monitoring system and time series database  
+**Documentation:** [prometheus/README.md](./prometheus/README.md)
+
+**Features:**
+- Metrics collection from all cluster nodes
+- PostgreSQL database monitoring
+- Configurable scrape targets
+- 15-day retention
+
+### Argo Workflows
+**Namespace:** `argo`  
+**Description:** Workflow orchestration engine  
+**Documentation:** [argo-workflows/README.md](./argo-workflows/README.md)
+
+**Features:**
+- Scheduled workflow execution
+- Hourly web scraping jobs
+- MinIO integration for log storage
+- Workflow artifact management
+
+### MinIO (Subchart)
+**Namespace:** `argo`  
+**Description:** S3-compatible object storage  
+**Parent Chart:** Argo Workflows
+
+**Features:**
+- Workflow log storage
+- Artifact repository
+- Web console for bucket management
+- 100Gi SSD storage
 
 ## Prerequisites
 
@@ -64,39 +70,83 @@ This mounts the largest available drive to `/mnt/ssd` on the master node for Min
 
 ## Installation
 
-**Important**: Each chart includes a `namespace.yaml` template with Helm pre-install hooks that automatically create the required namespace. You do **not** need to specify `--namespace` or `--create-namespace` flags.
+**Important**: Each chart includes a `namespace.yaml` template with Helm pre-install hooks that automatically create the required namespace.
 
-### 1. Apply Argo Workflows CRDs
+### Fresh Install
 
-CRDs must be installed separately before deploying Argo Workflows:
+For a brand new cluster or first-time deployment:
+
+#### 1. Install Argo Workflows CRDs
+
+CRDs must be installed before deploying Argo Workflows:
 
 ```bash
 cd helm/argo-workflows
-kubectl apply -k ./crds/
+kubectl apply -k ./.crds/
 ```
 
-### 2. Deploy Argo Workflows
+Verify CRDs are installed:
 
 ```bash
-helm install argo-workflows .
+kubectl get crds | grep argoproj.io
 ```
 
-This automatically creates the `argo` namespace and deploys all resources including MinIO.
-
-### 3. Deploy Prometheus
+#### 2. Deploy Prometheus
 
 ```bash
-cd ../prometheus
-helm install prometheus .
+helm upgrade --install prometheus ./helm/prometheus -n monitoring --create-namespace
 ```
 
-This automatically creates the `monitoring` namespace and deploys Prometheus.
+#### 3. Deploy Argo Workflows
+
+```bash
+helm upgrade --install argo-workflows ./helm/argo-workflows --create-namespace
+```
+
+This deploys:
+- Argo Workflows controller
+- MinIO object storage (100Gi)
+- Scheduled CronWorkflows
+- MinIO buckets (via Helm hook)
+
+### Upgrading Existing Deployments
+
+After modifying `values.yaml` or templates:
+
+```bash
+# Upgrade Prometheus
+helm upgrade prometheus ./helm/prometheus -n monitoring
+
+# Upgrade Argo Workflows
+helm upgrade argo-workflows ./helm/argo-workflows
+```
+
+If CRDs need updating:
+
+```bash
+kubectl apply -k ./helm/argo-workflows/.crds/
+```
 
 ## Accessing Services
 
+### Prometheus
+
+Prometheus is accessible via ClusterIP service within the cluster.
+
+**Port-forward for local access:**
+```bash
+kubectl port-forward -n monitoring svc/prometheus 9090:9090
+```
+Then visit: http://localhost:9090
+
+**Internal cluster access:**
+```
+http://prometheus.monitoring.svc.cluster.local:9090
+```
+
 ### MinIO Console
 
-Access the MinIO web console to manage buckets and objects:
+Access the MinIO web console:
 
 ```
 URL: http://master:31001
@@ -104,9 +154,9 @@ Username: admin
 Password: fidelio!
 ```
 
-### MinIO API
+### MinIO S3 API
 
-S3-compatible API endpoint for programmatic access:
+S3-compatible API endpoint:
 
 ```
 Endpoint: http://master:31000
@@ -114,19 +164,19 @@ Access Key: admin
 Secret Key: fidelio!
 ```
 
-### Prometheus
+### Argo Workflows
 
-Prometheus is accessible only within the cluster (ClusterIP service). Access to analytics will be provided through Grafana in a future deployment.
+View workflows using kubectl:
 
-For internal cluster access:
-```
-Service: prometheus.monitoring.svc.cluster.local:9090
-```
-
-To access temporarily from your local machine:
 ```bash
-kubectl port-forward svc/prometheus 9090:9090 -n monitoring
-# Then visit http://localhost:9090
+# List all workflows
+kubectl get workflows -n argo
+
+# List scheduled workflows
+kubectl get cronworkflows -n argo
+
+# View workflow logs
+argo logs -n argo <workflow-name>
 ```
 
 ## Managing Releases
@@ -139,17 +189,7 @@ helm list -A
 
 ### Upgrade a Release
 
-After modifying values or templates:
-
-```bash
-# Argo Workflows
-cd helm/argo-workflows
-helm upgrade argo-workflows .
-
-# Prometheus
-cd helm/prometheus
-helm upgrade prometheus .
-```
+See [Upgrading Existing Deployments](#upgrading-existing-deployments) above.
 
 ### Rollback a Release
 
@@ -169,11 +209,11 @@ helm rollback prometheus <revision-number>
 ### Uninstall a Release
 
 ```bash
+# Uninstall Prometheus
+helm uninstall prometheus -n monitoring
+
 # Uninstall Argo Workflows
 helm uninstall argo-workflows
-
-# Uninstall Prometheus
-helm uninstall prometheus
 ```
 
 ### Delete CRDs (if needed)
@@ -181,7 +221,7 @@ helm uninstall prometheus
 CRDs are not removed by `helm uninstall`. To fully remove:
 
 ```bash
-kubectl delete -k helm/argo-workflows/crds/
+kubectl delete -k helm/argo-workflows/.crds/
 ```
 
 ## Verifying Deployments
@@ -205,14 +245,14 @@ kubectl get pv,pvc -A
 ### View Logs
 
 ```bash
+# Prometheus logs
+kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus
+
 # Argo controller logs
-kubectl logs -n argo -l app=argo-controller
+kubectl logs -n argo -l app.kubernetes.io/component=controller
 
 # MinIO logs
-kubectl logs -n argo -l app=minio
-
-# Prometheus logs
-kubectl logs -n monitoring -l app=prometheus
+kubectl logs -n argo -l app.kubernetes.io/name=minio
 ```
 
 ## Troubleshooting
@@ -228,8 +268,8 @@ If the MinIO PVC is stuck in `Pending` state:
 
 2. Check PV/PVC binding:
    ```bash
-   kubectl describe pv minio-pv
-   kubectl describe pvc minio-pvc -n argo
+   kubectl describe pv argo-workflows-minio-pv
+   kubectl describe pvc argo-workflows-minio-pvc -n argo
    ```
 
 ### Argo CRD Issues
@@ -237,11 +277,20 @@ If the MinIO PVC is stuck in `Pending` state:
 If workflows fail to create:
 
 ```bash
-kubectl get crds | grep argo
+kubectl get crds | grep argoproj.io
 ```
 
 Re-apply CRDs if missing:
 
 ```bash
-kubectl apply -k helm/argo-workflows/crds/
+kubectl apply -k helm/argo-workflows/.crds/
+```
+
+### Bucket Creator Job Already Exists
+
+If you see "job already exists" error during upgrade:
+
+```bash
+kubectl delete job -n argo -l helm.sh/hook
+helm upgrade argo-workflows ./helm/argo-workflows
 ```

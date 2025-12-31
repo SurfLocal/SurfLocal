@@ -1,18 +1,199 @@
-minio:
-  storageClass: "minio-storage"
-  persistence:
-    enabled: true
-    size: 100Gi
-    pvPath: "/mnt/ssd/minio-data"
+# ==============================================================================
+# GLOBAL CONFIGURATION
+# ==============================================================================
+global:
+  environment: prod
+  clusterDomain: cluster.local
+
+# ==============================================================================
+# METADATA
+# ==============================================================================
+metadata:
+  namespace: argo
+  labels:
+    app.kubernetes.io/name: minio
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: argo-workflows
+  annotations: {}
+
+# ==============================================================================
+# IMAGE CONFIGURATION
+# ==============================================================================
+image:
+  repository: minio/minio
+  tag: latest
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# ==============================================================================
+# DEPLOYMENT CONFIGURATION
+# ==============================================================================
+deployment:
   replicaCount: 1
-  image:
-    repository: "minio/minio"
-    tag: "latest"
-    pullPolicy: IfNotPresent
+  strategy:
+    type: Recreate
+  restartPolicy: Always
+  volumeName: minio-storage
+  dataPath: /data
+  args:
+    - server
+    - /data
+    - --console-address
+    - ":9001"
+  initContainer:
+    enabled: true
+    image: busybox:latest
+    command: "chown -R 1000:1000 /data && chmod -R u+rwX /data"
+    runAsUser: 0
+
+# ==============================================================================
+# RESOURCE MANAGEMENT
+# ==============================================================================
+resources:
+  limits:
+    cpu: "1000m"
+    memory: "2Gi"
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+
+# ==============================================================================
+# NETWORKING
+# ==============================================================================
+service:
+  type: NodePort
   ports:
-    api: 9000
-    web: 9001
-    nodeApi: 31000
-    nodeWeb: 31001
+    - name: api
+      port: 9000
+      targetPort: 9000
+      nodePort: 31000
+      protocol: TCP
+    - name: console
+      port: 9001
+      targetPort: 9001
+      nodePort: 31001
+      protocol: TCP
+  annotations: {}
+  sessionAffinity: None
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  tls: []
+
+# ==============================================================================
+# STORAGE
+# ==============================================================================
+persistence:
+  enabled: true
+  storageClass: "minio-storage"
+  accessModes:
+    - ReadWriteOnce
+  size: 100Gi
+  existingClaim: ""
+  reclaimPolicy: Retain
+  hostPathType: DirectoryOrCreate
+  
+  persistentVolume:
+    enabled: true
+    hostPath: "/mnt/ssd/minio-data"
+    labels:
+      type: local
+    nodeAffinity:
+      required:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: In
+                values:
+                  - "true"
+
+# ==============================================================================
+# SECURITY
+# ==============================================================================
+securityContext:
+  pod:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  container:
+    allowPrivilegeEscalation: false
+    runAsUser: 1000
+    capabilities:
+      drop:
+        - ALL
+
+rbac:
+  enabled: false
+  serviceAccount:
+    create: false
+    name: ""
+    annotations: {}
+
+credentials:
+  accessKey: admin
+  secretKey: fidelio!
+
+# ==============================================================================
+# CONFIGURATION
+# ==============================================================================
+config:
+  region: us-west-1
+  browser: "on"
+  domain: ""
+  
+  # Bucket configurations
   buckets:
-    - argo-logs
+    - name: argo-logs
+      policy: none
+      purge: false
+
+# ==============================================================================
+# HEALTH CHECKS
+# ==============================================================================
+healthChecks:
+  liveness:
+    enabled: true
+    httpGet:
+      path: /minio/health/live
+      port: 9000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    successThreshold: 1
+    failureThreshold: 3
+  
+  readiness:
+    enabled: true
+    httpGet:
+      path: /minio/health/ready
+      port: 9000
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 3
+
+# ==============================================================================
+# SCHEDULING
+# ==============================================================================
+scheduling:
+  nodeSelector:
+    node-role.kubernetes.io/control-plane: "true"
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+
+# ==============================================================================
+# MONITORING
+# ==============================================================================
+monitoring:
+  metrics:
+    enabled: false
+    port: 9000
+    path: /minio/v2/metrics/cluster
+  logging:
+    level: info
+    format: json

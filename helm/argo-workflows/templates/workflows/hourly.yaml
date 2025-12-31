@@ -1,26 +1,37 @@
-{{- if .Values.hourlyWorkflows.enabled }}
-{{- range .Values.hourlyWorkflows.jobs }}
+{{- if .Values.workflows.hourly.enabled }}
+{{- range .Values.workflows.hourly.jobs }}
+{{- if .enabled }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: CronWorkflow
 metadata:
-  name: {{ . }}
-  namespace: argo
+  name: {{ include "argo-workflows.fullname" $ }}-{{ .name }}
+  namespace: {{ $.Values.metadata.namespace }}
+  labels:
+    {{- include "argo-workflows.labels" $ | nindent 4 }}
+    workflow-type: scheduled
+    schedule: hourly
 spec:
-  schedule: {{ $.Values.hourlyWorkflows.schedules | quote }}
+  schedule: {{ $.Values.workflows.hourly.schedule | quote }}
+  timezone: {{ $.Values.workflows.hourly.timezone | quote }}
   concurrencyPolicy: "Replace"
   startingDeadlineSeconds: 0
   workflowSpec:
     entrypoint: hourly-job
     ttlStrategy:
-      secondsAfterCompletion: 3600 # Remove workflow pod after 1 hour
+      secondsAfterCompletion: 3600
     templates:
       - name: hourly-job
         script:
-          image: {{ $.Values.hourlyWorkflows.image | quote }}
-          imagePullPolicy: Always
-          command: [ "sh", "-c" ]
+          image: "{{ $.Values.workflows.hourly.image.repository }}:{{ $.Values.workflows.hourly.image.tag }}"
+          imagePullPolicy: {{ $.Values.workflows.hourly.image.pullPolicy }}
+          command: ["sh", "-c"]
           source: |
-            python /app/jobs/{{ . | replace "-scraper-hourly" "" }}_scraper_hourly.py 2>&1
+            python /app/jobs/{{ .name | replace "-scraper-hourly" "" }}_scraper_hourly.py 2>&1
+          {{- with $.Values.workflows.hourly.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
 {{- end }}
 {{- end }}

@@ -1,11 +1,22 @@
+{{- if and .Values.persistence.enabled .Values.persistence.persistentVolume.enabled }}
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: prometheus-pv
+  name: {{ include "prometheus.fullname" . }}-pv
+  labels:
+    {{- include "prometheus.labels" . | nindent 4 }}
 spec:
   capacity:
-    storage: 10Gi
+    storage: {{ .Values.persistence.size }}
   accessModes:
-    - ReadWriteOnce
+    {{- toYaml .Values.persistence.accessModes | nindent 4 }}
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass }}
+  {{- end }}
   hostPath:
-    path: /data/prometheus
+    path: {{ .Values.persistence.persistentVolume.hostPath }}
+  {{- with .Values.persistence.persistentVolume.nodeAffinity }}
+  nodeAffinity:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
