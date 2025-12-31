@@ -1,0 +1,22 @@
+{{- if .Values.dashboards.machineMetrics.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "grafana.fullname" . }}-dashboard-machine
+  namespace: {{ .Values.metadata.namespace }}
+  labels:
+    {{- include "grafana.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  machine-metrics.json: |
+    {{- $panels := list
+      "dashboards/infrastructure/01-cpu-temperature.json"
+      "dashboards/infrastructure/02-cpu-usage.json"
+      "dashboards/infrastructure/03-system-load-average.json"
+      "dashboards/infrastructure/04-memory-usage.json"
+      "dashboards/infrastructure/05-microsd-usage-worker-nodes.json"
+      "dashboards/infrastructure/06-network-traffic.json"
+      "dashboards/infrastructure/07-minio-ssd-storage-master.json"
+    -}}
+    {{ include "grafana.assembleDashboard" (dict "base" "dashboards/infrastructure/_dashboard.json" "panels" $panels "ctx" .) | nindent 4 }}
+{{- end }}

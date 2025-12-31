@@ -1,0 +1,23 @@
+{{- if .Values.dashboards.k8sMetrics.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "grafana.fullname" . }}-dashboard-k8s
+  namespace: {{ .Values.metadata.namespace }}
+  labels:
+    {{- include "grafana.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  k8s-metrics.json: |
+    {{- $panels := list
+      "dashboards/kubernetes/01-nodes-online.json"
+      "dashboards/kubernetes/02-container-cpu-usage.json"
+      "dashboards/kubernetes/03-container-memory-usage.json"
+      "dashboards/kubernetes/04-running-containers.json"
+      "dashboards/kubernetes/05-cpu-by-namespace.json"
+      "dashboards/kubernetes/06-memory-by-namespace.json"
+      "dashboards/kubernetes/07-network-by-namespace.json"
+      "dashboards/kubernetes/08-disk-io-by-namespace.json"
+    -}}
+    {{ include "grafana.assembleDashboard" (dict "base" "dashboards/kubernetes/_dashboard.json" "panels" $panels "ctx" .) | nindent 4 }}
+{{- end }}

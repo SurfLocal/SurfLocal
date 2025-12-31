@@ -15,7 +15,12 @@
 # ----------- #
 # Helm owners #
 # ----------- #
-/helm/prometheus @SurfLocal/infra
+/helm/ @SurfLocal/infra
+
+# ----------------- #
+# Networking owners #
+# ----------------- #
+/networking/ @SurfLocal/infra
 
 # --------------- #
 # Database owners #

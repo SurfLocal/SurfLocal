@@ -18,6 +18,19 @@ data:
     scrape_configs:
     {{- range .Values.config.scrapeConfigs }}
       - job_name: '{{ .jobName }}'
+        {{- if .scheme }}
+        scheme: {{ .scheme }}
+        {{- end }}
+        {{- if .metricsPath }}
+        metrics_path: {{ .metricsPath }}
+        {{- end }}
+        {{- if .tlsConfig }}
+        tls_config:
+          insecure_skip_verify: {{ .tlsConfig.insecureSkipVerify | default false }}
+        {{- end }}
+        {{- if .bearerTokenFile }}
+        bearer_token_file: {{ .bearerTokenFile }}
+        {{- end }}
         static_configs:
           - targets:
             {{- range .targets }}

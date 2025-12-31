@@ -1,6 +1,15 @@
 ---
 # Install and configure PostgreSQL Exporter for Prometheus metrics
 
+- name: Set postgres user password for exporter authentication
+  become_user: postgres
+  shell: |
+    psql -c "ALTER USER postgres WITH PASSWORD '{{ postgres_exporter_password }}';"
+  args:
+    executable: /bin/bash
+  no_log: true
+  changed_when: false
+
 - name: Check system architecture
   command: uname -m
   register: arch

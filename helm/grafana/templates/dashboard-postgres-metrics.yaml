@@ -1,0 +1,26 @@
+{{- if .Values.dashboards.postgresMetrics.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "grafana.fullname" . }}-dashboard-postgres
+  namespace: {{ .Values.metadata.namespace }}
+  labels:
+    {{- include "grafana.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  postgres-metrics.json: |
+    {{- $panels := list
+      "dashboards/database/01-postgresql-status.json"
+      "dashboards/database/02-active-connections.json"
+      "dashboards/database/03-total-connections.json"
+      "dashboards/database/04-database-size.json"
+      "dashboards/database/05-transactions-per-second.json"
+      "dashboards/database/06-tuples-per-second.json"
+      "dashboards/database/07-cache-hit-ratio.json"
+      "dashboards/database/08-database-issues.json"
+      "dashboards/database/09-table-activity---inserts.json"
+      "dashboards/database/10-table-scans.json"
+      "dashboards/database/11-postgresql-host-disk-usage.json"
+    -}}
+    {{ include "grafana.assembleDashboard" (dict "base" "dashboards/database/_dashboard.json" "panels" $panels "ctx" .) | nindent 4 }}
+{{- end }}

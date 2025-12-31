@@ -1,0 +1,125 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "grafana.fullname" . }}
+  namespace: {{ .Values.metadata.namespace }}
+  labels:
+    {{- include "grafana.labels" . | nindent 4 }}
+  {{- with .Values.metadata.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.deployment.replicaCount }}
+  {{- with .Values.deployment.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "grafana.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "grafana.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.securityContext.pod }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduling.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduling.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduling.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      restartPolicy: {{ .Values.deployment.restartPolicy }}
+      containers:
+      - name: grafana
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- with .Values.securityContext.container }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          value: {{ .Values.config.adminUser | quote }}
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: {{ .Values.config.adminPassword | quote }}
+        - name: GF_PATHS_PROVISIONING
+          value: "/etc/grafana/provisioning"
+        ports:
+        - containerPort: {{ .Values.service.targetPort }}
+          name: http
+          protocol: {{ .Values.service.protocol }}
+        {{- with .Values.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- if .Values.healthChecks.liveness.enabled }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.healthChecks.liveness.httpGet.path }}
+            port: {{ .Values.healthChecks.liveness.httpGet.port }}
+          initialDelaySeconds: {{ .Values.healthChecks.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.healthChecks.liveness.periodSeconds }}
+          timeoutSeconds: {{ .Values.healthChecks.liveness.timeoutSeconds }}
+          successThreshold: {{ .Values.healthChecks.liveness.successThreshold }}
+          failureThreshold: {{ .Values.healthChecks.liveness.failureThreshold }}
+        {{- end }}
+        {{- if .Values.healthChecks.readiness.enabled }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.healthChecks.readiness.httpGet.path }}
+            port: {{ .Values.healthChecks.readiness.httpGet.port }}
+          initialDelaySeconds: {{ .Values.healthChecks.readiness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.healthChecks.readiness.periodSeconds }}
+          timeoutSeconds: {{ .Values.healthChecks.readiness.timeoutSeconds }}
+          successThreshold: {{ .Values.healthChecks.readiness.successThreshold }}
+          failureThreshold: {{ .Values.healthChecks.readiness.failureThreshold }}
+        {{- end }}
+        volumeMounts:
+        - name: grafana-storage
+          mountPath: /var/lib/grafana
+        - name: grafana-datasources
+          mountPath: /etc/grafana/provisioning/datasources
+        - name: grafana-dashboards-config
+          mountPath: /etc/grafana/provisioning/dashboards
+        - name: grafana-dashboards
+          mountPath: /var/lib/grafana/dashboards
+      volumes:
+      - name: grafana-storage
+        persistentVolumeClaim:
+          claimName: {{ include "grafana.fullname" . }}
+      - name: grafana-datasources
+        configMap:
+          name: {{ include "grafana.fullname" . }}-datasources
+      - name: grafana-dashboards-config
+        configMap:
+          name: {{ include "grafana.fullname" . }}-dashboards
+      - name: grafana-dashboards
+        projected:
+          sources:
+          {{- if .Values.dashboards.machineMetrics.enabled }}
+          - configMap:
+              name: {{ include "grafana.fullname" . }}-dashboard-machine
+          {{- end }}
+          {{- if .Values.dashboards.k8sMetrics.enabled }}
+          - configMap:
+              name: {{ include "grafana.fullname" . }}-dashboard-k8s
+          {{- end }}
+          {{- if .Values.dashboards.postgresMetrics.enabled }}
+          - configMap:
+              name: {{ include "grafana.fullname" . }}-dashboard-postgres
+          {{- end }}

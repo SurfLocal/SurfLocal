@@ -11,17 +11,17 @@ global:
 metadata:
   namespace: monitoring
   labels:
-    app.kubernetes.io/name: prometheus
-    app.kubernetes.io/component: monitoring
-    app.kubernetes.io/part-of: observability
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: visualization
+    app.kubernetes.io/part-of: monitoring
   annotations: {}
 
 # ==============================================================================
 # IMAGE CONFIGURATION
 # ==============================================================================
 image:
-  repository: prom/prometheus
-  tag: latest
+  repository: grafana/grafana
+  tag: "10.2.3"
   pullPolicy: IfNotPresent
   pullSecrets: []
 
@@ -31,10 +31,7 @@ image:
 deployment:
   replicaCount: 1
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+    type: Recreate
   restartPolicy: Always
 
 # ==============================================================================
@@ -42,22 +39,21 @@ deployment:
 # ==============================================================================
 resources:
   limits:
-    cpu: "1000m"
-    memory: "2Gi"
-  requests:
     cpu: "500m"
-    memory: "1Gi"
+    memory: "512Mi"
+  requests:
+    cpu: "250m"
+    memory: "256Mi"
 
 # ==============================================================================
 # NETWORKING
 # ==============================================================================
 service:
-  type: ClusterIP
-  ports:
-    - name: http
-      port: 9090
-      targetPort: 9090
-      protocol: TCP
+  type: NodePort
+  port: 3000
+  targetPort: 3000
+  nodePort: 32000
+  protocol: TCP
   annotations: {}
   sessionAffinity: None
 
@@ -76,20 +72,8 @@ persistence:
   storageClass: "local-path"
   accessModes:
     - ReadWriteOnce
-  size: 10Gi
+  size: 5Gi
   existingClaim: ""
-  
-  persistentVolume:
-    enabled: true
-    hostPath: "/mnt/ssd/prometheus-data"
-    nodeAffinity:
-      required:
-        nodeSelectorTerms:
-          - matchExpressions:
-              - key: kubernetes.io/hostname
-                operator: In
-                values:
-                  - master
 
 # ==============================================================================
 # SECURITY
@@ -97,21 +81,21 @@ persistence:
 securityContext:
   pod:
     runAsNonRoot: true
-    runAsUser: 65534
-    runAsGroup: 65534
-    fsGroup: 65534
+    runAsUser: 472
+    runAsGroup: 472
+    fsGroup: 472
   container:
     allowPrivilegeEscalation: false
     runAsNonRoot: true
-    runAsUser: 65534
+    runAsUser: 472
     capabilities:
       drop:
         - ALL
 
 rbac:
-  enabled: true
+  enabled: false
   serviceAccount:
-    create: true
+    create: false
     name: ""
     annotations: {}
 
@@ -119,38 +103,49 @@ rbac:
 # CONFIGURATION
 # ==============================================================================
 config:
-  scrapeInterval: 15s
-  evaluationInterval: 15s
+  # Admin credentials
+  adminUser: admin
+  adminPassword: admin
   
-  # Scrape configurations
-  scrapeConfigs:
-    - jobName: prometheus
-      targets:
-        - localhost:9090
-    
-    - jobName: raspberry-pi-nodes
-      targets:
-        - master:9100
-        - worker1:9100
-        - worker2:9100
-        - worker3:9100
-        - postgres:9100
-    
-    - jobName: postgres
-      targets:
-        - postgres:9187
-    
-    - jobName: kubelet
-      scheme: https
-      tlsConfig:
-        insecureSkipVerify: true
-      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
-      targets:
-        - master:10250
-        - worker1:10250
-        - worker2:10250
-        - worker3:10250
-      metricsPath: /metrics/cadvisor
+  # Datasources
+  datasources:
+    - name: Prometheus
+      type: prometheus
+      url: http://prometheus.monitoring.svc.cluster.local:9090
+      access: proxy
+      isDefault: true
+      editable: false
+  
+  # Dashboard providers
+  dashboardProviders:
+    - name: default
+      orgId: 1
+      folder: ""
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards
+
+# ==============================================================================
+# DASHBOARDS
+# ==============================================================================
+dashboards:
+  # Machine metrics dashboard
+  machineMetrics:
+    enabled: true
+    title: "Raspberry Pi - Machine Metrics"
+  
+  # Kubernetes metrics dashboard
+  k8sMetrics:
+    enabled: true
+    title: "Kubernetes - Cluster Metrics"
+  
+  # PostgreSQL metrics dashboard
+  postgresMetrics:
+    enabled: true
+    title: "PostgreSQL - Database Metrics"
 
 # ==============================================================================
 # HEALTH CHECKS
@@ -159,8 +154,8 @@ healthChecks:
   liveness:
     enabled: true
     httpGet:
-      path: /-/healthy
-      port: 9090
+      path: /api/health
+      port: 3000
     initialDelaySeconds: 30
     periodSeconds: 10
     timeoutSeconds: 5
@@ -170,8 +165,8 @@ healthChecks:
   readiness:
     enabled: true
     httpGet:
-      path: /-/ready
-      port: 9090
+      path: /api/health
+      port: 3000
     initialDelaySeconds: 5
     periodSeconds: 5
     timeoutSeconds: 3
@@ -182,27 +177,7 @@ healthChecks:
 # SCHEDULING
 # ==============================================================================
 scheduling:
-  nodeSelector:
-    kubernetes.io/hostname: master
+  nodeSelector: {}
   tolerations: []
   affinity: {}
   priorityClassName: ""
-
-# ==============================================================================
-# MONITORING
-# ==============================================================================
-monitoring:
-  metrics:
-    enabled: true
-    port: 9090
-    path: /metrics
-  logging:
-    level: info
-    format: logfmt
-
-# ==============================================================================
-# RETENTION
-# ==============================================================================
-retention:
-  time: 15d
-  size: ""

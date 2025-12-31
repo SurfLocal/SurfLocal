@@ -5,13 +5,6 @@
 postgres_exporter_user: "postgres"
 postgres_exporter_password: "{{ platform_admin_password }}"
 
-# Databases to monitor (first one is primary, others are additional)
-<<<<<<< Updated upstream
-# postgres_exporter_databases:
-#   - "surf_analytics"
-#   - "postgres"
-#   - "template1"
-=======
->>>>>>> Stashed changes
+# Databases to monitor
 postgres_exporter_databases:
   - "surf_analytics"

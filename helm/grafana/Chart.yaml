@@ -1,0 +1,16 @@
+apiVersion: v2
+name: grafana
+description: Grafana monitoring dashboards for SurfLocal Kubernetes cluster
+type: application
+version: 0.1.0
+appVersion: "10.2.3"
+keywords:
+  - monitoring
+  - grafana
+  - dashboards
+  - visualization
+maintainers:
+  - name: SurfLocal Backend
+home: https://grafana.com/
+sources:
+  - https://github.com/grafana/grafana
