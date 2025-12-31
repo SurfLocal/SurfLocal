@@ -5,9 +5,8 @@ metadata:
   labels:
     {{- include "minio.labels" . | nindent 4 }}
   annotations:
-    helm.sh/hook: pre-install
-    helm.sh/hook-weight: "-5"
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-5"
 provisioner: kubernetes.io/no-provisioner
 volumeBindingMode: WaitForFirstConsumer
 allowVolumeExpansion: true
-reclaimPolicy: Retain

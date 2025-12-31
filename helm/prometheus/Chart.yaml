@@ -10,7 +10,7 @@ keywords:
   - metrics
   - observability
 maintainers:
-  - name: SurfLocal Team
+  - name: SurfLocal Backend
 home: https://prometheus.io/
 sources:
   - https://github.com/prometheus/prometheus

@@ -11,7 +11,7 @@ keywords:
   - object-storage
   - argo
 maintainers:
-  - name: SurfLocal Team
+  - name: SurfLocal Backend
 home: https://min.io/
 sources:
   - https://github.com/minio/minio

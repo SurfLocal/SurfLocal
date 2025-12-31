@@ -96,11 +96,13 @@ persistence:
 # ==============================================================================
 securityContext:
   pod:
-    runAsNonRoot: false
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
     fsGroup: 65534
   container:
     allowPrivilegeEscalation: false
-    runAsNonRoot: false
+    runAsNonRoot: true
     runAsUser: 65534
     capabilities:
       drop:

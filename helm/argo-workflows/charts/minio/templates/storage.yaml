@@ -6,16 +6,19 @@ metadata:
   name: {{ include "minio.fullname" . }}-pv
   labels:
     {{- include "minio.labels" . | nindent 4 }}
+    {{- with .Values.persistence.persistentVolume.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   storageClassName: {{ .Values.persistence.storageClass }}
   capacity:
     storage: {{ .Values.persistence.size }}
   accessModes:
     {{- toYaml .Values.persistence.accessModes | nindent 4 }}
-  persistentVolumeReclaimPolicy: Retain
+  persistentVolumeReclaimPolicy: {{ .Values.persistence.reclaimPolicy }}
   hostPath:
     path: {{ .Values.persistence.persistentVolume.hostPath }}
-    type: DirectoryOrCreate
+    type: {{ .Values.persistence.hostPathType }}
   {{- with .Values.persistence.persistentVolume.nodeAffinity }}
   nodeAffinity:
     {{- toYaml . | nindent 4 }}
@@ -37,9 +40,7 @@ spec:
   resources:
     requests:
       storage: {{ .Values.persistence.size }}
-  {{- if not .Values.persistence.existingClaim }}
   selector:
     matchLabels:
       {{- include "minio.selectorLabels" . | nindent 6 }}
-  {{- end }}
 {{- end }}

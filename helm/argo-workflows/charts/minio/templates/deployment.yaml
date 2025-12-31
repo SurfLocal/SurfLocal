@@ -19,9 +19,9 @@ spec:
       labels:
         {{- include "minio.selectorLabels" . | nindent 8 }}
     spec:
-      {{- with .Values.scheduling.nodeSelector }}
+      {{- if .Values.scheduling.nodeSelector }}
       nodeSelector:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml .Values.scheduling.nodeSelector | nindent 8 }}
       {{- end }}
       {{- with .Values.scheduling.tolerations }}
       tolerations:
@@ -39,6 +39,17 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       restartPolicy: {{ .Values.deployment.restartPolicy }}
+      {{- if .Values.deployment.initContainer.enabled }}
+      initContainers:
+        - name: fix-permissions
+          image: {{ .Values.deployment.initContainer.image }}
+          command: ['sh', '-c', '{{ .Values.deployment.initContainer.command }}']
+          volumeMounts:
+            - name: {{ .Values.deployment.volumeName }}
+              mountPath: {{ .Values.deployment.dataPath }}
+          securityContext:
+            runAsUser: {{ .Values.deployment.initContainer.runAsUser }}
+      {{- end }}
       containers:
         - name: minio
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -48,10 +59,7 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           args:
-            - server
-            - /data
-            - --console-address
-            - ":9001"
+            {{- toYaml .Values.deployment.args | nindent 12 }}
           env:
             - name: MINIO_ACCESS_KEY
               valueFrom:
@@ -64,12 +72,11 @@ spec:
                   name: {{ include "minio.fullname" . }}-creds
                   key: secretkey
           ports:
-            - containerPort: 9000
-              name: api
-              protocol: TCP
-            - containerPort: 9001
-              name: console
-              protocol: TCP
+          {{- range .Values.service.ports }}
+            - containerPort: {{ .targetPort }}
+              name: {{ .name }}
+              protocol: {{ .protocol }}
+          {{- end }}
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -97,10 +104,10 @@ spec:
             failureThreshold: {{ .Values.healthChecks.readiness.failureThreshold }}
           {{- end }}
           volumeMounts:
-            - name: minio-storage
-              mountPath: /data
+            - name: {{ .Values.deployment.volumeName }}
+              mountPath: {{ .Values.deployment.dataPath }}
       volumes:
-        - name: minio-storage
+        - name: {{ .Values.deployment.volumeName }}
           persistentVolumeClaim:
             claimName: {{ include "minio.fullname" . }}-pvc
 

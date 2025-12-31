@@ -42,12 +42,12 @@ spec:
         - name: MINIO_ACCESS_KEY
           valueFrom:
             secretKeyRef:
-              name: minio-creds
+              name: argo-workflows-minio-creds
               key: accesskey
         - name: MINIO_SECRET_KEY
           valueFrom:
             secretKeyRef:
-              name: minio-creds
+              name: argo-workflows-minio-creds
               key: secretkey
       nodeSelector:
         kubernetes.io/hostname: master

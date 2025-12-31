@@ -33,6 +33,18 @@ deployment:
   strategy:
     type: Recreate
   restartPolicy: Always
+  volumeName: minio-storage
+  dataPath: /data
+  args:
+    - server
+    - /data
+    - --console-address
+    - ":9001"
+  initContainer:
+    enabled: true
+    image: busybox:latest
+    command: "chown -R 1000:1000 /data && chmod -R u+rwX /data"
+    runAsUser: 0
 
 # ==============================================================================
 # RESOURCE MANAGEMENT
@@ -81,29 +93,33 @@ persistence:
     - ReadWriteOnce
   size: 100Gi
   existingClaim: ""
+  reclaimPolicy: Retain
+  hostPathType: DirectoryOrCreate
   
   persistentVolume:
     enabled: true
     hostPath: "/mnt/ssd/minio-data"
+    labels:
+      type: local
     nodeAffinity:
       required:
         nodeSelectorTerms:
           - matchExpressions:
-              - key: kubernetes.io/hostname
+              - key: node-role.kubernetes.io/control-plane
                 operator: In
                 values:
-                  - master
+                  - "true"
 
 # ==============================================================================
 # SECURITY
 # ==============================================================================
 securityContext:
   pod:
-    runAsNonRoot: false
+    runAsUser: 1000
+    runAsGroup: 1000
     fsGroup: 1000
   container:
     allowPrivilegeEscalation: false
-    runAsNonRoot: false
     runAsUser: 1000
     capabilities:
       drop:
@@ -124,7 +140,7 @@ credentials:
 # CONFIGURATION
 # ==============================================================================
 config:
-  region: us-east-1
+  region: us-west-1
   browser: "on"
   domain: ""
   
@@ -165,7 +181,7 @@ healthChecks:
 # ==============================================================================
 scheduling:
   nodeSelector:
-    kubernetes.io/hostname: master
+    node-role.kubernetes.io/control-plane: "true"
   tolerations: []
   affinity: {}
   priorityClassName: ""
