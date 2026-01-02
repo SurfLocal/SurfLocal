@@ -1,0 +1,72 @@
+# macOS system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Video editing software files
+*.prproj
+*.pproj
+*.fcp
+*.fcpbundle
+*.veg
+*.mpg.vsp
+
+# Photo editing software files
+*.psd
+*.psb
+*.ai
+*.eps
+*.svgz
+*.lrdata
+*.lrcat
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Metadata files
+*.xmp
+*.exif
+*.iptc
+
+# Cache and preview files
+.Preview
+.apdisk
+.AppleDouble
+.LSOverride
+
+# Directory structure files
+.directory
+._*
+
+# Large media processing files
+*.wav
+*.mp3
+*.m4a
+*.aac
+
+# Keep media files (uncomment if you want to ignore specific types)
+# *.jpg
+# *.jpeg
+# *.png
+# *.gif
+# *.bmp
+# *.tiff
+# *.raw
+# *.cr2
+# *.nef
+# *.arw
+# *.dng
+# *.mp4
+# *.mov
+# *.avi
+# *.mkv
+# *.webm
+# *.m4v
