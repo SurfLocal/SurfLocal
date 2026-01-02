@@ -1,6 +1,6 @@
 # Prometheus Helm Chart
 
-Prometheus monitoring system and time series database for the SurfLocal Kubernetes cluster.
+Prometheus monitoring system and time series database for the Salt Kubernetes cluster.
 
 ## Overview
 

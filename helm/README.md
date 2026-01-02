@@ -1,6 +1,6 @@
 # Helm Charts
 
-This directory contains Helm charts for deploying services to the SurfLocal Kubernetes cluster.
+This directory contains Helm charts for deploying services to the Salt Kubernetes cluster.
 
 ## Documentation
 

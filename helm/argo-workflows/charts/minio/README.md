@@ -1,6 +1,6 @@
 # MinIO Helm Chart
 
-MinIO object storage for Argo Workflows artifact repository in the SurfLocal Kubernetes cluster.
+MinIO object storage for Argo Workflows artifact repository in the Salt Kubernetes cluster.
 
 ## Overview
 
@@ -45,7 +45,7 @@ ansible-playbook playbooks/deploy_s3_storage.yaml
 6. **Persists configuration** - Adds entry to `/etc/fstab` for automatic mounting on reboot
 7. **Creates MinIO directory** - Sets up `/mnt/ssd/minio-data` with proper permissions
 
-See `@/Users/robronayne/Desktop/Git/SurfLocal/ansible/roles/s3_storage/tasks/main.yaml` for implementation details.
+See `@/Users/robronayne/Desktop/Git/Salt/ansible/roles/s3_storage/tasks/main.yaml` for implementation details.
 
 ## Installation
 
