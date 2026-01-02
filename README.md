@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="https://github.com/SurfLocal/SurfLocal/blob/media/surfLocal.png?raw=true" width="250" alt="Project Logo">
+  <img src="https://github.com/SurfLocal/Salt/blob/media/logos/logo1.png?raw=true" width="250" alt="Project Logo">
 </p>
 
-# SurfLocal
+# Salt
 
 This is a surfing app that integrates AI-powered swell and condition forecasting, alongside a social platform for surfers to connect and share their sessions. Users can log their surf sessions, share insights, and interact with others within the surfing community.
 
@@ -72,8 +72,8 @@ SurfLocal/
 
 Clone the repository and navigate into it:
 ```bash
-git clone https://github.com/SurfLocal/SurfLocal.git
-cd SurfLocal
+git clone https://github.com/SurfLocal/Salt.git
+cd Salt
 ```
 
 ### Getting the Cluster Up and Running

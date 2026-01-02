@@ -11,7 +11,7 @@ assignees: ""
 A clear and concise description of the feature you'd like to see implemented.
 
 ## Motivation
-Please explain the motivation behind this feature request. What problem does it solve? Why would this be useful for the SurfLocal project?
+Please explain the motivation behind this feature request. What problem does it solve? Why would this be useful for the Salt project?
 
 ## Use Cases
 Describe specific use cases for this feature:

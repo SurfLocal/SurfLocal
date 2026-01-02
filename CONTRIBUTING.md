@@ -1,4 +1,4 @@
-# Contributing to SurfLocal
+# Contributing to Salt
 
 Thank you for your interest in contributing to this project! We are excited to collaborate with our friends to improve and grow this repository. Please follow the guidelines below to ensure that your contributions are aligned with the project's standards.
 

@@ -1,6 +1,6 @@
 # Grafana Helm Chart
 
-Grafana monitoring dashboards for the SurfLocal Kubernetes cluster.
+Grafana monitoring dashboards for the Salt Kubernetes cluster.
 
 ## Overview
 
