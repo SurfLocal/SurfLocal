@@ -1,0 +1,200 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 168 28% 89%;
+    --foreground: 168 70% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 168 70% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 168 70% 15%;
+
+    --primary: 168 65% 25%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 168 25% 85%;
+    --secondary-foreground: 168 65% 20%;
+
+    --muted: 168 20% 92%;
+    --muted-foreground: 168 25% 40%;
+
+    --accent: 168 50% 35%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 168 20% 80%;
+    --input: 168 20% 80%;
+    --ring: 168 65% 25%;
+
+    --radius: 0.75rem;
+
+    /* Custom colors for the app - teal palette from logo */
+    --salt-dark: 168 65% 25%;
+    --salt-mid: 168 40% 55%;
+    --salt-light: 168 28% 75%;
+    --salt-bg: 168 28% 89%;
+    
+    /* Ocean colors for maps section */
+    --ocean-deep: 213 80% 12%;
+    --ocean-mid: 213 70% 20%;
+    --ocean-light: 199 80% 50%;
+    --wave-foam: 195 100% 95%;
+    --sand: 39 40% 90%;
+    --coral: 16 85% 60%;
+    --seaweed: 160 50% 45%;
+    
+    /* Confidence colors */
+    --confidence-high: 160 60% 45%;
+    --confidence-mid: 45 90% 50%;
+    --confidence-low: 0 70% 55%;
+
+    /* Shadows */
+    --shadow-soft: 0 4px 20px -4px hsl(168 65% 25% / 0.12);
+    --shadow-medium: 0 8px 30px -6px hsl(168 65% 25% / 0.18);
+    --shadow-glow: 0 0 40px hsl(168 50% 35% / 0.2);
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 168 50% 20%;
+    --sidebar-primary: 168 65% 25%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 168 25% 92%;
+    --sidebar-accent-foreground: 168 50% 20%;
+    --sidebar-border: 168 20% 85%;
+    --sidebar-ring: 168 65% 35%;
+  }
+
+  .dark {
+    --background: 168 50% 8%;
+    --foreground: 0 0% 98%;
+
+    --card: 168 45% 12%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 168 45% 12%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 168 50% 45%;
+    --primary-foreground: 168 50% 8%;
+
+    --secondary: 168 40% 18%;
+    --secondary-foreground: 0 0% 95%;
+
+    --muted: 168 35% 15%;
+    --muted-foreground: 168 20% 60%;
+
+    --accent: 168 50% 45%;
+    --accent-foreground: 168 50% 8%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 168 35% 20%;
+    --input: 168 35% 20%;
+    --ring: 168 50% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html, body, #root {
+    @apply h-full overflow-hidden;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Outfit', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', system-ui, sans-serif;
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer utilities {
+  .text-gradient-salt {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, hsl(var(--salt-dark)), hsl(var(--salt-mid)));
+  }
+
+  .bg-gradient-salt {
+    background: linear-gradient(135deg, hsl(var(--salt-dark)), hsl(var(--salt-mid)));
+  }
+
+  .text-gradient-ocean {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, hsl(var(--ocean-deep)), hsl(var(--ocean-light)));
+  }
+
+  .bg-gradient-ocean {
+    background: linear-gradient(135deg, hsl(var(--ocean-deep)), hsl(var(--ocean-mid)));
+  }
+
+  .glass-panel {
+    @apply bg-card/95 backdrop-blur-md;
+  }
+}
+
+/* Ship sailing animation */
+@keyframes sail {
+  0%, 100% {
+    transform: translateX(-10px) rotate(-2deg);
+  }
+  50% {
+    transform: translateX(10px) rotate(2deg);
+  }
+}
+
+@keyframes wave {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-sail {
+  animation: sail 2s ease-in-out infinite;
+}
+
+.animate-wave {
+  animation: wave 1.5s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
