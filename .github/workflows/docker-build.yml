@@ -74,7 +74,7 @@ jobs:
                        --build-arg MINIO_ENDPOINT="http://master:31000" \
                        -t ${IMAGE_NAME}:${IMAGE_TAG} \
                        -t ${IMAGE_NAME}:${TAG_PREFIX}-latest \
-                       -f web-scraping/web_scraper.Dockerfile . --push
+                       -f web-scraping/web-scraper.Dockerfile . --push
 
       # Step 6: Images already pushed via buildx build --push
       - name: Images pushed successfully
