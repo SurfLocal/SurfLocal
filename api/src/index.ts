@@ -72,18 +72,18 @@ app.use(errorHandler);
 const startServer = async () => {
   try {
     await pool.query('SELECT 1');
-    console.log('✅ Database connection established');
+    console.log('Database connection established');
 
     await ensureBucketsExist();
-    console.log('✅ MinIO buckets verified');
+    console.log('MinIO buckets verified');
 
     app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`🔗 API URL: http://localhost:${PORT}`);
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`API URL: http://localhost:${PORT}`);
     });
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
+    console.error('Failed to start server:', error);
     process.exit(1);
   }
 };
