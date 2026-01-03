@@ -2446,6 +2446,74 @@ const handleSpotClick = (spot: Spot) => {
                                       </button>
                                     )}
                                   </div>
+
+                                  {/* Reply Input - Mobile */}
+                                  {replyingTo === comment.id && (
+                                    <div className="flex gap-2 mt-3">
+                                      <Input
+                                        placeholder="Write a reply..."
+                                        value={replyContent}
+                                        onChange={(e) => setReplyContent(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleReply(comment.id)}
+                                        className="text-sm"
+                                        autoFocus
+                                      />
+                                      <Button size="sm" onClick={() => handleReply(comment.id)}>Reply</Button>
+                                      <Button size="sm" variant="ghost" onClick={() => { setReplyingTo(null); setReplyContent(''); }}>
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  )}
+
+                                  {/* Replies - Mobile */}
+                                  {comment.replies && comment.replies.length > 0 && (
+                                    <div className="mt-3 space-y-2">
+                                      {comment.replies.map((reply) => (
+                                        <div key={reply.id} className="bg-muted/20 rounded-lg p-2 ml-4">
+                                          <div className="flex items-start gap-2">
+                                            <Avatar className="h-5 w-5">
+                                              <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                                                {(reply.profile?.display_name || 'S')[0].toUpperCase()}
+                                              </AvatarFallback>
+                                            </Avatar>
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="font-medium text-xs text-foreground">{reply.profile?.display_name || 'Surfer'}</span>
+                                                <span className="text-xs text-muted-foreground">{formatCommentTime(reply.created_at)}</span>
+                                              </div>
+                                              <p className="text-xs text-foreground mt-1">{reply.content}</p>
+                                              <div className="flex items-center gap-2 mt-1">
+                                                <button 
+                                                  onClick={() => handleLikeComment(reply.id, reply.user_id, reply.is_liked)} 
+                                                  className={`flex items-center gap-1 text-xs transition-colors ${user?.id === reply.user_id ? 'opacity-30 cursor-not-allowed' : reply.is_liked ? 'opacity-100' : 'opacity-60 hover:opacity-100'}`}
+                                                  disabled={user?.id === reply.user_id}
+                                                >
+                                                  <img src={shakaIcon} alt="Shaka" className={`h-4 w-4 object-contain ${reply.is_liked ? 'scale-110' : ''} transition-transform`} />
+                                                  {reply.likes_count > 0 && reply.likes_count}
+                                                </button>
+                                                <button 
+                                                  onClick={() => handleKookComment(reply.id, reply.user_id, reply.is_kooked)} 
+                                                  className={`flex items-center gap-1 text-xs transition-colors ${user?.id === reply.user_id ? 'opacity-30 cursor-not-allowed' : reply.is_kooked ? 'opacity-100' : 'opacity-60 hover:opacity-100'}`}
+                                                  disabled={user?.id === reply.user_id}
+                                                >
+                                                  <img src={kookIcon} alt="Kook" className={`h-5 w-5 object-contain ${reply.is_kooked ? 'scale-110' : ''} transition-transform`} />
+                                                  {reply.kooks_count > 0 && reply.kooks_count}
+                                                </button>
+                                                {(user?.id === reply.user_id || isAdmin) && (
+                                                  <button 
+                                                    onClick={() => handleDeleteComment(reply.id, reply.user_id)} 
+                                                    className="text-xs text-destructive/60 hover:text-destructive p-1 ml-auto"
+                                                  >
+                                                    <Trash2 className="h-3 w-3" />
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>
