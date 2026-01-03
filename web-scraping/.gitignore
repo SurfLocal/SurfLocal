@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.py[cod]
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Logs
+*.log
+
+# Data files
+*.csv
+*.json
+data/
+
+# Temporary files
+*.tmp
