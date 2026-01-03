@@ -44,14 +44,8 @@ npm install
 
 ### 2. Configure Environment
 
-Copy `.env.example` to `.env.qa` or `.env.prod`:
+Set the following environment variables for your deployment. For local development, create a `.env` file (not committed to git):
 
-```bash
-cp .env.example .env.qa
-# Edit with your values
-```
-
-Required variables:
 ```env
 VITE_API_URL=http://localhost:3000/api
 VITE_MAPBOX_TOKEN=your_mapbox_token_here

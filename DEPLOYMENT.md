@@ -21,7 +21,7 @@ High-level overview of the Salt surf tracking application infrastructure and how
 │  │  Port: 80   │ │Port: 3000│ │ Port: 5432  │ │Port: 9000│        │
 │  │             │ │          │ │             │ │          │        │
 │  │ Namespace:  │ │Namespace:│ │             │ │Namespace:│        │
-│  │     app     │ │    app   │ │             │ │ storage  │        │
+│  │    salt     │ │   salt   │ │             │ │ storage  │        │
 │  └─────────────┘ └────┬─────┘ └──────┬──────┘ └────┬─────┘        │
 │                       │              │             │              │
 │                       └──────────────┴─────────────┘              │
@@ -91,7 +91,7 @@ Salt is deployed on a Raspberry Pi Kubernetes cluster with the following compone
 
 **Purpose:** RESTful API server handling all business logic and data operations.
 
-**Deployment:** Docker container in `default` namespace, built from `api/salt_api.Dockerfile`.
+**Deployment:** Docker container in `default` namespace, built from `api/salt-api.Dockerfile`.
 
 **Technology Stack:**
 - Node.js 20 + Express.js
@@ -284,10 +284,10 @@ This separation provides:
 
 ### Environment-Specific Configuration
 
-Each component uses environment-specific `.env` files:
-- `.env.example` - Template with dummy values (committed)
-- `.env.qa` - QA environment (gitignored)
-- `.env.prod` - Production environment (gitignored)
+Environment variables are configured at deployment time:
+- **Local development**: Set variables in local `.env` files (gitignored)
+- **Docker builds**: Passed as build arguments via GitHub Actions or CLI
+- **Kubernetes**: Stored in Kubernetes Secrets and ConfigMaps
 
 ### Secrets Storage
 
@@ -396,6 +396,5 @@ For detailed deployment instructions and configuration:
 - `postgres/README.md` - Database schema
 
 **Development:**
-- `docker-compose.yml` - Local development environment
 - `api/AUTH_IMPLEMENTATION.md` - Authentication details
 - `api/REDIS_CACHING.md` - Future caching implementation

@@ -4,7 +4,7 @@ This directory contains Docker images and scripts for automated surf data collec
 
 ## Automated Docker Image Builds
 
-Docker images for the scrapers are automatically built and pushed to Docker Hub using a GitHub Actions workflow defined in `.github/workflows/docker-build.yml`. The workflow is triggered when changes are pushed to the `main` or `qa` branches via a pull request. It tags the images accordingly and securely retrieves necessary secrets for the build process.
+Docker images for the scrapers are automatically built and pushed to Docker Hub using a GitHub Actions workflow defined in `.github/workflows/docker-build-scraper.yml`. The workflow is triggered when changes are pushed to the `main` or `qa` branches via a pull request. It tags the images accordingly and securely retrieves necessary secrets for the build process.
 
 ### Build Process
 

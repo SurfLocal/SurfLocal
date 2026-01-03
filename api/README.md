@@ -26,11 +26,7 @@ npm install
 
 ## Configuration
 
-Copy `.env.example` to `.env` and update with your values:
-
-```bash
-cp .env.example .env
-```
+Set the following environment variables for your deployment. In development, these can be set in your shell or a local `.env` file (not committed to git).
 
 ### Environment Variables
 
