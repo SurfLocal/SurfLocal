@@ -1,0 +1,15 @@
+[master_node]
+master ansible_host=master ansible_user=pi
+
+[worker_nodes]
+worker1 ansible_host=worker1 ansible_user=pi
+worker2 ansible_host=worker2 ansible_user=pi
+worker3 ansible_host=worker3 ansible_user=pi
+
+[database_node]
+postgres ansible_host=postgres ansible_user=pi
+
+[rpi_cluster:children]
+master_node
+worker_nodes
+database_node

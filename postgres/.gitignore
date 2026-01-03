@@ -1,0 +1,7 @@
+# Database dumps
+*.sql.gz
+*.dump
+backups/
+
+# Temporary files
+*.tmp
