@@ -1,6 +1,6 @@
 # Helm Chart Standards
 
-This document defines the standardized structure and conventions for all Helm charts in this repository.
+Standardized structure and conventions for all Helm charts in this repository.
 
 ## Table of Contents
 
@@ -314,7 +314,7 @@ autoscaling:
 # APPLICATION-SPECIFIC CONFIGURATION
 # ==============================================================================
 # Custom configuration specific to this application
-# This section varies per chart and should be well-documented
+# Varies per chart - document thoroughly
 ```
 
 ## Template Standards
@@ -512,10 +512,8 @@ When updating existing charts to follow these standards:
 2. Update templates to reference new value paths
 3. Add `_helpers.tpl` with standard helper functions
 4. Update `Chart.yaml` with complete metadata
-5. Write comprehensive README.md
-6. Add NOTES.txt for post-install guidance
-7. Test deployment with new values
-8. Update documentation
+5. Test deployment with new values
+6. Update documentation and write complete README.md
 
 ## Validation
 

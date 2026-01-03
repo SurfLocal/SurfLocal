@@ -1,0 +1,82 @@
+name: Build and Tag Web Scraping Docker Images
+# Triggered on push to main or qa branches (only done through PR)
+on:
+  push:
+    branches:
+      - main
+      - qa
+    paths:
+      - 'web-scraping/**'  # When changes are made to the web-scraping directory
+  workflow_dispatch:   # Allow manual trigger
+
+jobs:
+  build-and-tag:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      # Step 2: Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      # Step 3: Get the Git commit hash to use as the image tag
+      - name: Get the commit hash
+        id: commit_hash
+        run: |
+          COMMIT_HASH=$(git rev-parse --short HEAD)  # Short commit hash for tagging
+          echo "COMMIT_HASH=${COMMIT_HASH}" >> $GITHUB_ENV
+
+      # Step 4: Log in to Docker Hub
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # Step 5: Build and push Docker image with appropriate tags
+      - name: Build Docker image
+        run: |
+          # Determine the target branch of the push
+          TARGET_BRANCH="${{ github.ref }}"
+          
+          # Check if the push is to main or qa
+          if [[ "$TARGET_BRANCH" == "refs/heads/qa" ]]; then
+            TAG_PREFIX="qa"
+          elif [[ "$TARGET_BRANCH" == "refs/heads/main" ]]; then
+            TAG_PREFIX="prod"
+          else
+            echo "This workflow only runs when pushing to 'qa' or 'main'."
+            exit 1
+          fi
+
+          # Tag the image with prefix and commit hash
+          IMAGE_TAG="${TAG_PREFIX}-${COMMIT_HASH}"
+          IMAGE_NAME="surflocally/web-scraper"
+          
+          echo "Building Docker image with tag ${IMAGE_TAG}"
+
+          # Persist the variables to GitHub environment so that they can be used in later steps
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_ENV
+          echo "TAG_PREFIX=${TAG_PREFIX}" >> $GITHUB_ENV
+
+          # Build the Docker image for multiple platforms
+          docker buildx build --platform linux/amd64,linux/arm64 \
+                       --build-arg DB_HOST="postgres" \
+                       --build-arg DB_USER="argo_runner" \
+                       --build-arg DB_PASSWORD=${{ secrets.DB_PASSWORD_ARGO }} \
+                       --build-arg DB_NAME="surf_analytics" \
+                       --build-arg OPENWEATHER_API_KEY=${{ secrets.OPENWEATHER_API_KEY }} \
+                       --build-arg MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }} \
+                       --build-arg MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }} \
+                       --build-arg MINIO_ENDPOINT="http://master:31000" \
+                       -t ${IMAGE_NAME}:${IMAGE_TAG} \
+                       -t ${IMAGE_NAME}:${TAG_PREFIX}-latest \
+                       -f web-scraping/web-scraper.Dockerfile . --push
+
+      # Step 6: Images already pushed via buildx build --push
+      - name: Images pushed successfully
+        run: |
+          echo "Images ${IMAGE_NAME}:${IMAGE_TAG} and ${IMAGE_NAME}:${TAG_PREFIX}-latest pushed for both amd64 and arm64"

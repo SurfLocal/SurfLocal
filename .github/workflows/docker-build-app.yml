@@ -1,0 +1,79 @@
+name: Build and Push Salt App Docker Image
+
+on:
+  push:
+    branches:
+      - main
+      - qa
+    paths:
+      - 'app/**'
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Set up QEMU for multi-platform builds
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # Step 3: Set up Docker Buildx for building multi-platform images
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Step 4: Get the Git commit hash to use as the image tag
+      - name: Get the commit hash
+        id: commit_hash
+        run: |
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          echo "COMMIT_HASH=${COMMIT_HASH}" >> $GITHUB_ENV
+
+      # Step 5: Log in to Docker Hub
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # Step 6: Determine tag prefix based on branch (qa, prod, or dev)
+      - name: Determine tag prefix
+        run: |
+          TARGET_BRANCH="${{ github.ref }}"
+          if [[ "$TARGET_BRANCH" == "refs/heads/qa" ]]; then
+            TAG_PREFIX="qa"
+          elif [[ "$TARGET_BRANCH" == "refs/heads/main" ]]; then
+            TAG_PREFIX="prod"
+          else
+            TAG_PREFIX="dev"
+          fi
+          echo "TAG_PREFIX=${TAG_PREFIX}" >> $GITHUB_ENV
+
+      # Step 7: Build and push Docker image for multiple platforms with appropriate tags
+      - name: Build and push App image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: app/salt-app.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            surflocally/salt-app:${{ env.TAG_PREFIX }}-${{ env.COMMIT_HASH }}
+            surflocally/salt-app:${{ env.TAG_PREFIX }}-latest
+          build-args: |
+            VITE_API_URL=/api
+            VITE_MINIO_URL=/minio
+            VITE_MAPBOX_TOKEN=${{ secrets.VITE_MAPBOX_TOKEN }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Step 8: Confirm successful push
+      - name: Image pushed successfully
+        run: |
+          echo "Salt App images pushed:"
+          echo "  - surflocally/salt-app:${{ env.TAG_PREFIX }}-${{ env.COMMIT_HASH }}"
+          echo "  - surflocally/salt-app:${{ env.TAG_PREFIX }}-latest"

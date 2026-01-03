@@ -1,0 +1,66 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "minio.fullname" . }}-create-buckets
+  namespace: {{ .Values.metadata.namespace }}
+  labels:
+    {{- include "minio.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bucket-creator
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "minio.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        job: create-buckets
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: create-buckets
+        image: minio/mc:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          echo "Waiting for MinIO to be ready..."
+          until mc alias set minio http://{{ include "minio.fullname" . }}:9000 {{ .Values.credentials.accessKey }} {{ .Values.credentials.secretKey }}; do
+            echo "MinIO not ready, retrying..."
+            sleep 5
+          done
+          
+          echo "Creating all MinIO buckets..."
+          
+          # Create argo-logs bucket (for Argo Workflows artifacts)
+          {{- range .Values.config.buckets }}
+          if ! mc ls minio/{{ .name }} > /dev/null 2>&1; then
+            echo "Creating {{ .name }} bucket..."
+            mc mb minio/{{ .name }}
+            echo "{{ .name }} bucket created"
+          else
+            echo "{{ .name }} bucket already exists"
+          fi
+          {{- end }}
+          
+          {{- if .Values.saltBuckets.enabled }}
+          # Create Salt app buckets and ensure correct policies
+          {{- range .Values.saltBuckets.buckets }}
+          if ! mc ls minio/{{ .name }} > /dev/null 2>&1; then
+            echo "Creating {{ .name }} bucket..."
+            mc mb minio/{{ .name }}
+          else
+            echo "{{ .name }} bucket already exists"
+          fi
+          {{- if eq .policy "download" }}
+          echo "Setting public read access on {{ .name }}..."
+          mc anonymous set download minio/{{ .name }}
+          {{- end }}
+          {{- end }}
+          {{- end }}
+          
+          echo "All buckets are ready!"
+          mc ls minio/

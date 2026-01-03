@@ -15,10 +15,5 @@ maintainers:
 home: https://argoproj.github.io/argo-workflows/
 sources:
   - https://github.com/argoproj/argo-workflows
-dependencies:
-  - name: minio
-    version: "*"
-    repository: "file://./charts/minio"
-    condition: minio.enabled
-
 # Note: CRDs should be installed separately with kubectl apply -k ./crds/
+# MinIO is now a separate chart in /helm/minio

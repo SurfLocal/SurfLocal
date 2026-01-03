@@ -11,4 +11,15 @@ metadata:
   {{- end }}
 data:
   config: |
-    # Workflow controller configuration
+    # Artifact repository configuration
+    artifactRepository:
+      s3:
+        bucket: argo-logs
+        endpoint: master:31000
+        insecure: true
+        accessKeySecret:
+          name: minio-creds
+          key: accesskey
+        secretKeySecret:
+          name: minio-creds
+          key: secretkey

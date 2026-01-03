@@ -21,7 +21,12 @@ By following these guidelines, you'll help us maintain a consistent development 
 ## Directory Structure
 
 ```
-SurfLocal/
+Salt/
+├── .github/                    # GitHub Actions workflows
+│   └── workflows/
+│       ├── docker-build-api.yml      # API image builds
+│       ├── docker-build-app.yml      # App image builds
+│       └── docker-build-scraper.yml  # Scraper image builds
 ├── ansible/                    # Infrastructure automation
 │   ├── ansible.cfg
 │   ├── hosts                   # Inventory file
@@ -39,19 +44,23 @@ SurfLocal/
 │   │   ├── deploy_s3_storage.yaml
 │   │   └── site.yaml
 │   ├── roles/                  # Ansible roles for each service
-│   └── vars/                   # Variable files
+│   └── vars/                   # Variable files (secrets encrypted)
+├── api/                        # Backend API (Express.js + TypeScript)
+│   ├── src/                    # Source code
+│   ├── tests/                  # Unit and integration tests
+│   └── salt-api.Dockerfile     # Docker build configuration
+├── app/                        # Frontend application (React + Vite)
+│   ├── src/                    # Source code
+│   ├── tests/                  # Unit and integration tests
+│   └── salt-app.Dockerfile     # Docker build configuration
 ├── helm/                       # Kubernetes application deployments
 │   ├── STANDARDS.md           # Helm chart conventions
 │   ├── argo-workflows/        # Workflow orchestration
-│   │   ├── .crds/            # Custom Resource Definitions
-│   │   ├── charts/minio/     # MinIO subchart for S3 storage
-│   │   ├── templates/
-│   │   ├── values.yaml
-│   │   └── Chart.yaml
-│   └── prometheus/            # Monitoring and metrics
-│       ├── templates/
-│       ├── values.yaml
-│       └── Chart.yaml
+│   ├── grafana/               # Monitoring dashboards
+│   ├── minio/                 # S3-compatible object storage
+│   ├── prometheus/            # Metrics collection
+│   ├── salt-api/              # Backend API deployment
+│   └── salt-app/              # Frontend app deployment
 ├── networking/                 # Network setup scripts
 │   ├── boot_pi.sh
 │   └── init_host.sh
@@ -61,7 +70,8 @@ SurfLocal/
 │   └── users/
 ├── web-scraping/              # Data collection jobs
 │   ├── jobs/
-│   ├── Dockerfile
+│   │   └── tests/             # Scraper tests
+│   ├── web-scraper.Dockerfile
 │   └── requirements.txt
 └── README.md
 ```

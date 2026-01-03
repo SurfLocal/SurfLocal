@@ -234,6 +234,163 @@
     - ingested.wind_data.sql
   changed_when: false
 
+#################################
+# SALT APP DATABASE SETUP       #
+#################################
+
+- name: Create database (salt_app)
+  become_user: postgres
+  shell: |
+    psql -tc "SELECT 1 FROM pg_database WHERE datname = 'salt_app'" | grep -q 1 || psql -c "CREATE DATABASE salt_app"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Create schemas for salt_app
+  become_user: postgres
+  shell: |
+    psql -d salt_app -f /tmp/postgres_setup/databases/salt_app/schemas/{{ item }}
+  args:
+    executable: /bin/bash
+  loop:
+    - public.sql
+    - auth.sql
+  changed_when: false
+
+- name: Create custom types for salt_app
+  become_user: postgres
+  shell: |
+    psql -d salt_app -f /tmp/postgres_setup/databases/salt_app/types/{{ item }}
+  args:
+    executable: /bin/bash
+  loop:
+    - app_role.sql
+  changed_when: false
+
+- name: Create salt_app users (with templated passwords)
+  become_user: postgres
+  shell: |
+    psql -d salt_app -c "
+    DO \$\$
+    BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ item.name }}') THEN
+            CREATE USER {{ item.name }} WITH {{ item.options }} PASSWORD '{{ item.password }}';
+        END IF;
+    END
+    \$\$;"
+  args:
+    executable: /bin/bash
+  loop:
+    - { name: 'salt_admin', options: 'LOGIN', password: '{{ salt_admin_password }}' }
+    - { name: 'salt_app', options: 'LOGIN', password: '{{ salt_app_password }}' }
+  no_log: true
+  changed_when: false
+
+- name: Create salt_app roles (salt_app database)
+  become_user: postgres
+  shell: |
+    psql -d salt_app -f /tmp/postgres_setup/roles/service_accounts/{{ item }}
+  args:
+    executable: /bin/bash
+  loop:
+    - salt_read.sql
+    - salt_write.sql
+  changed_when: false
+  ignore_errors: true
+
+- name: Apply salt_read role grants to surf_analytics database
+  become_user: postgres
+  shell: |
+    psql -d surf_analytics -f /tmp/postgres_setup/roles/service_accounts/salt_read.sql
+  args:
+    executable: /bin/bash
+  changed_when: false
+  ignore_errors: true
+
+- name: Grant roles to salt_app user
+  become_user: postgres
+  shell: |
+    psql -d salt_app -f /tmp/postgres_setup/users/service_accounts/salt_app.sql
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Grant privileges to salt_admin user
+  become_user: postgres
+  shell: |
+    psql -d salt_app -f /tmp/postgres_setup/users/human_users/salt_admin.sql
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Create salt_app tables (auth schema first)
+  become_user: postgres
+  shell: |
+    psql -d salt_app -f /tmp/postgres_setup/databases/salt_app/tables/{{ item }}
+  args:
+    executable: /bin/bash
+  loop:
+    - auth.users.sql
+  changed_when: false
+
+- name: Create salt_app tables (public schema)
+  become_user: postgres
+  shell: |
+    psql -d salt_app -f /tmp/postgres_setup/databases/salt_app/tables/{{ item }}
+  args:
+    executable: /bin/bash
+  loop:
+    - public.profiles.sql
+    - public.user_roles.sql
+    - public.spots.sql
+    - public.boards.sql
+    - public.sessions.sql
+    - public.session_media.sql
+    - public.session_likes.sql
+    - public.session_kooks.sql
+    - public.session_comments.sql
+    - public.follows.sql
+    - public.favorite_spots.sql
+    - public.saved_locations.sql
+    - public.forecast_comments.sql
+    - public.forecast_comment_likes.sql
+    - public.forecast_comment_kooks.sql
+  changed_when: false
+
+- name: Create salt_app functions
+  become_user: postgres
+  shell: |
+    psql -d salt_app -f /tmp/postgres_setup/databases/salt_app/functions/{{ item }}
+  args:
+    executable: /bin/bash
+  loop:
+    - update_updated_at_column.sql
+    - handle_new_user.sql
+    - has_role.sql
+    - update_shaka_count.sql
+    - update_kook_count.sql
+    - update_forecast_shaka_count.sql
+    - update_forecast_kook_count.sql
+  changed_when: false
+
+- name: Create salt_app triggers
+  become_user: postgres
+  shell: |
+    psql -d salt_app -f /tmp/postgres_setup/databases/salt_app/triggers/{{ item }}
+  args:
+    executable: /bin/bash
+  loop:
+    - users_updated_at.sql
+    - profiles_updated_at.sql
+    - boards_updated_at.sql
+    - sessions_updated_at.sql
+    - new_user_profile.sql
+    - session_likes_update_shaka.sql
+    - session_kooks_update_kook.sql
+    - forecast_comment_likes_update_shaka.sql
+    - forecast_comment_kooks_update_kook.sql
+  changed_when: false
+
 - name: Clean up temporary SQL files
   file:
     path: /tmp/postgres_setup

@@ -1,41 +1,31 @@
-# Ignore Ansible local facts file
-/.ansible/
-
-# Ignore Ansible vault passwords
-vault_password_file
-secrets.yaml.template
-
-# Ignore Ansible retry files
-.retry
-
-# Ignore system and editor temporary files
+# OS and Editor
+.DS_Store
 *~
 *.swp
 *.swo
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Python
+__pycache__/
 *.pyc
 *.pyo
-.DS_Store
-
-# Ignore Ansible log files
-ansible.log
-
-# Ignore Ansible generated directories
-/__pycache__/
-/.molecule/
-/.testinfra/
-/.tox/
-
-# Ignore Ansible hosts file
-ansible/hosts
-
-# Ignore virtual environment directory (if using)
+*.py[cod]
 venv/
 env/
+.venv/
 
-# Ignore test artifacts and coverage reports
-web-scraping/.coverage
-web-scraping/htmlcov/
-web-scraping/.pytest_cache/
-*.pyc
-*.pyo
-__pycache__/
+# Logs
+logs/
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*.cache

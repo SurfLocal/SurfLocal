@@ -5,8 +5,11 @@ This directory contains Helm charts for deploying services to the Salt Kubernete
 ## Documentation
 
 - **[STANDARDS.md](./STANDARDS.md)** - Helm chart standardization guide and conventions
+- **[Salt App Chart](./salt-app/README.md)** - Frontend application
+- **[Salt API Chart](./salt-api/README.md)** - Backend API service
 - **[Prometheus Chart](./prometheus/README.md)** - Monitoring and metrics collection
 - **[Argo Workflows Chart](./argo-workflows/README.md)** - Workflow orchestration and scheduling
+- **[MinIO Chart](./minio/README.md)** - Object storage
 
 ## Quick Links
 
@@ -16,6 +19,28 @@ This directory contains Helm charts for deploying services to the Salt Kubernete
 - [Troubleshooting](#troubleshooting)
 
 ## Available Charts
+
+### Salt App (Frontend)
+**Namespace:** `default`  
+**Description:** React frontend application served via Nginx  
+**Documentation:** [salt-app/README.md](./salt-app/README.md)
+
+**Features:**
+- User interface for session logging
+- Dashboard with statistics
+- Social features (feed, connections)
+- Maps and spot reports
+
+### Salt API (Backend)
+**Namespace:** `default`  
+**Description:** Express.js backend API service  
+**Documentation:** [salt-api/README.md](./salt-api/README.md)
+
+**Features:**
+- User authentication (JWT)
+- Session and board management
+- Social features API
+- File uploads to MinIO
 
 ### Prometheus
 **Namespace:** `monitoring`  
@@ -39,14 +64,14 @@ This directory contains Helm charts for deploying services to the Salt Kubernete
 - MinIO integration for log storage
 - Workflow artifact management
 
-### MinIO (Subchart)
-**Namespace:** `argo`  
+### MinIO
+**Namespace:** `storage`  
 **Description:** S3-compatible object storage  
-**Parent Chart:** Argo Workflows
+**Documentation:** [minio/README.md](./minio/README.md)
 
 **Features:**
-- Workflow log storage
-- Artifact repository
+- Salt app media storage (session photos, avatars, board photos)
+- Argo workflow artifact storage
 - Web console for bucket management
 - 100Gi SSD storage
 
@@ -74,7 +99,7 @@ This mounts the largest available drive to `/mnt/ssd` on the master node for Min
 
 | Deployment | Namespace | Size | Storage Class | Node Affinity |
 |------------|-----------|------|---------------|---------------|
-| MinIO | `argo` | 100Gi | `minio-storage` | Master (SSD) |
+| MinIO | `storage` | 100Gi | `minio-storage` | Master (SSD) |
 | Prometheus | `monitoring` | 10Gi | `local-path` | Any |
 | Grafana | `monitoring` | 5Gi | `local-path` | Any |
 
@@ -140,7 +165,18 @@ kubectl get crds | grep argoproj.io
 helm upgrade --install prometheus ./helm/prometheus -n monitoring --create-namespace
 ```
 
-#### 3. Deploy Argo Workflows
+#### 3. Deploy MinIO
+
+```bash
+helm upgrade --install minio ./helm/minio -n storage --create-namespace
+```
+
+This deploys:
+- MinIO object storage (100Gi)
+- Salt app buckets (session-media, avatars, board-photos)
+- Argo logs bucket
+
+#### 4. Deploy Argo Workflows
 
 ```bash
 helm upgrade --install argo-workflows ./helm/argo-workflows --create-namespace
@@ -148,9 +184,25 @@ helm upgrade --install argo-workflows ./helm/argo-workflows --create-namespace
 
 This deploys:
 - Argo Workflows controller
-- MinIO object storage (100Gi)
 - Scheduled CronWorkflows
-- MinIO buckets (via Helm hook)
+- Argo bucket creator job (connects to MinIO in storage namespace)
+
+#### 5. Deploy Salt API
+
+```bash
+helm upgrade --install salt-api ./helm/salt-api \
+  --set secrets.databasePassword=<your-db-password> \
+  --set secrets.minioSecretKey=<your-minio-secret> \
+  --set secrets.jwtSecret=$(openssl rand -base64 32)
+```
+
+#### 6. Deploy Salt App
+
+```bash
+helm upgrade --install salt-app ./helm/salt-app
+```
+
+Access the application at: http://master:30080
 
 ### Upgrading Existing Deployments
 
@@ -194,7 +246,7 @@ Access the MinIO web console:
 ```
 URL: http://master:31001
 Username: admin
-Password: fidelio!
+Password: <your-minio-secret-key>
 ```
 
 ### MinIO S3 API
@@ -204,7 +256,7 @@ S3-compatible API endpoint:
 ```
 Endpoint: http://master:31000
 Access Key: admin
-Secret Key: fidelio!
+Secret Key: <your-minio-secret-key>
 ```
 
 ### Argo Workflows
@@ -295,7 +347,7 @@ kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus
 kubectl logs -n argo -l app.kubernetes.io/component=controller
 
 # MinIO logs
-kubectl logs -n argo -l app.kubernetes.io/name=minio
+kubectl logs -n storage -l app.kubernetes.io/name=minio
 ```
 
 ## Troubleshooting
@@ -311,8 +363,8 @@ If the MinIO PVC is stuck in `Pending` state:
 
 2. Check PV/PVC binding:
    ```bash
-   kubectl describe pv argo-workflows-minio-pv
-   kubectl describe pvc argo-workflows-minio-pvc -n argo
+   kubectl describe pv minio-pv
+   kubectl describe pvc minio-pvc -n storage
    ```
 
 ### Argo CRD Issues

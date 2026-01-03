@@ -159,8 +159,8 @@ kubectl get workflows -n argo
 # Install MinIO client
 brew install minio/stable/mc
 
-# Configure alias
-mc alias set minio http://master:31000 admin fidelio!
+# Configure alias (use your MinIO credentials)
+mc alias set minio http://master:31000 <access-key> <secret-key>
 
 # List buckets
 mc ls minio
@@ -175,7 +175,7 @@ Web interface for bucket management:
 ```
 URL: http://master:31001
 Username: admin
-Password: fidelio!
+Password: <your-minio-secret-key>
 ```
 
 ### MinIO S3 API
@@ -185,7 +185,7 @@ Programmatic access:
 ```
 Endpoint: http://master:31000
 Access Key: admin
-Secret Key: fidelio!
+Secret Key: <your-minio-secret-key>
 ```
 
 ## Managing Workflows
