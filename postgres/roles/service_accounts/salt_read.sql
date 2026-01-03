@@ -27,4 +27,14 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT SELECT ON TABLES TO salt_read;
 -- Ensure role is inheritable
 ALTER ROLE salt_read INHERIT;
 
-COMMENT ON ROLE salt_read IS 'Read-only access to salt_app database for service accounts';
+-- Grant read access to surf_analytics database schemas
+-- This allows the Salt API to query live swell/wind data
+GRANT CONNECT ON DATABASE surf_analytics TO salt_read;
+GRANT USAGE ON SCHEMA reference TO salt_read;
+GRANT USAGE ON SCHEMA ingested TO salt_read;
+GRANT SELECT ON ALL TABLES IN SCHEMA reference TO salt_read;
+GRANT SELECT ON ALL TABLES IN SCHEMA ingested TO salt_read;
+ALTER DEFAULT PRIVILEGES IN SCHEMA reference GRANT SELECT ON TABLES TO salt_read;
+ALTER DEFAULT PRIVILEGES IN SCHEMA ingested GRANT SELECT ON TABLES TO salt_read;
+
+COMMENT ON ROLE salt_read IS 'Read-only access to salt_app and surf_analytics databases for service accounts';

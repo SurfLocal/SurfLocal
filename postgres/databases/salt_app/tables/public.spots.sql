@@ -8,6 +8,7 @@ CREATE TABLE public.spots (
     description TEXT,
     difficulty TEXT,
     break_type TEXT,
+    timezone TEXT NOT NULL DEFAULT 'America/Los_Angeles',
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
