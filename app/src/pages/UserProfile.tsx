@@ -152,7 +152,7 @@ const UserProfile = () => {
         // Check admin status separately to not break profile loading if it fails
         try {
           const adminCheck = await api.auth.checkAdmin(userId);
-          setIsProfileAdmin(adminCheck?.isAdmin || false);
+          setIsProfileAdmin(adminCheck?.is_admin || false);
         } catch (error) {
           console.error('Error checking admin status:', error);
           setIsProfileAdmin(false);
