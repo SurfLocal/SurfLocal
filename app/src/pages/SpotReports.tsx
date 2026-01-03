@@ -1867,7 +1867,7 @@ const handleSpotClick = (spot: Spot) => {
                             {replyingTo === comment.id && (
                               <div className="flex gap-2 mt-3 ml-9">
                                 <Input
-                                  placeholder="Write a reply..."
+                                  placeholder="Write a reply"
                                   value={replyContent}
                                   onChange={(e) => setReplyContent(e.target.value)}
                                   onKeyDown={(e) => e.key === 'Enter' && handleReply(comment.id)}
@@ -2451,7 +2451,7 @@ const handleSpotClick = (spot: Spot) => {
                                   {replyingTo === comment.id && (
                                     <div className="flex gap-2 mt-3">
                                       <Input
-                                        placeholder="Write a reply..."
+                                        placeholder="Write reply..."
                                         value={replyContent}
                                         onChange={(e) => setReplyContent(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && handleReply(comment.id)}
