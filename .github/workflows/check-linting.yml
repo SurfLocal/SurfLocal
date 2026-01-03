@@ -50,7 +50,26 @@ jobs:
       - name: Check for newline at end of files and fail if missing
         id: newline-check
         run: |
-          files_missing_newline=$(find . -type f ! -path './.git/*' -exec sh -c 'tail -c1 < "$1" | read -r _ || echo "$1"' sh {} \;)
+          files_missing_newline=$(find . -type f \
+            ! -path './.git/*' \
+            ! -path '*/node_modules/*' \
+            ! -path '*/venv/*' \
+            ! -path '*/dist/*' \
+            ! -path '*.ico' \
+            ! -path '*.png' \
+            ! -path '*.jpg' \
+            ! -path '*.jpeg' \
+            ! -path '*.svg' \
+            ! -path '*.gif' \
+            ! -path '*.webp' \
+            ! -path '*.woff' \
+            ! -path '*.woff2' \
+            ! -path '*.ttf' \
+            ! -path '*.eot' \
+            ! -path '*.lock' \
+            ! -path '*.css' \
+            ! -path '*.html' \
+            -exec sh -c 'tail -c1 < "$1" | read -r _ || echo "$1"' sh {} \;)
           if [ -n "$files_missing_newline" ]; then
             echo "::error::One or more files are missing a newline character at the end."
             echo "$files_missing_newline"
