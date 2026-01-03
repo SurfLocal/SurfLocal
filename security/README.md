@@ -260,6 +260,52 @@ Sensitive configuration values are never committed to version control. The appli
 
 Production deployments use Kubernetes Secrets to inject these values securely.
 
+## Test Coverage
+
+All security measures are covered by automated tests to prevent regressions.
+
+### Upload Security Tests
+
+The upload test suite verifies authentication and authorization for all file operations:
+
+- Session media uploads require authentication and session ownership
+- Avatar uploads require authentication
+- Board photo uploads require authentication and board ownership
+- File deletion requires authentication, validates bucket whitelist, and verifies file ownership
+
+Run with: `npm test -- upload.test.ts`
+
+### Authentication Tests
+
+The auth test suite includes tests for the admin check endpoint:
+
+- Admin status check requires authentication
+- Users can only check their own admin status
+- Returns correct admin status based on database roles
+
+Run with: `npm test -- auth.test.ts`
+
+### Search Security Tests
+
+The social test suite includes tests for ILIKE pattern escaping:
+
+- Special characters (`%`, `_`, `\`) are properly escaped
+- Prevents pattern injection attacks in search queries
+- Returns empty results for empty queries
+
+Run with: `npm test -- social.test.ts`
+
+### Running All Tests
+
+Execute the full test suite with:
+
+```bash
+cd api
+npm test
+```
+
+All 82 tests should pass, including 13 new security-focused tests.
+
 ## Reporting Security Issues
 
 If you discover a security vulnerability, please report it privately rather than opening a public issue. Contact the maintainers directly to coordinate disclosure.

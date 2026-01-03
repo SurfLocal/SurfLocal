@@ -158,6 +158,41 @@ describe('Auth Routes', () => {
       expect(result.error).toContain('Invalid');
     });
   });
+
+  describe('GET /auth/check-admin', () => {
+    it('should require authentication', async () => {
+      const result = await simulateCheckAdmin(null);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('No token provided');
+    });
+
+    it('should return admin status for authenticated user', async () => {
+      mockQuery.mockResolvedValueOnce({ 
+        rows: [{ is_admin: true }] 
+      });
+
+      const result = await simulateCheckAdmin('valid-token');
+
+      expect(result.success).toBe(true);
+      expect(result.is_admin).toBe(true);
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('user_roles'),
+        ['user-123']
+      );
+    });
+
+    it('should return false for non-admin user', async () => {
+      mockQuery.mockResolvedValueOnce({ 
+        rows: [{ is_admin: false }] 
+      });
+
+      const result = await simulateCheckAdmin('valid-token');
+
+      expect(result.success).toBe(true);
+      expect(result.is_admin).toBe(false);
+    });
+  });
 });
 
 // Helper functions to simulate route handlers
@@ -198,6 +233,24 @@ async function simulateSignin(data: { email: string; password: string }) {
 
     const token = jwt.sign({ userId: user.id }, 'secret');
     return { success: true, user, token };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+async function simulateCheckAdmin(token: string | null) {
+  if (!token) {
+    return { success: false, error: 'No token provided' };
+  }
+
+  try {
+    const decoded = jwt.verify(token, 'secret') as { userId: string };
+    const result = await mockQuery(
+      "SELECT EXISTS(SELECT 1 FROM user_roles WHERE user_id = $1 AND role = 'admin') as is_admin",
+      [decoded.userId]
+    );
+
+    return { success: true, is_admin: result.rows[0].is_admin };
   } catch (error: any) {
     return { success: false, error: error.message };
   }

@@ -97,6 +97,43 @@ describe('Social Routes', () => {
     });
   });
 
+  describe('GET /social/search-profiles', () => {
+    it('should escape ILIKE special characters', async () => {
+      const searchQuery = 'test%user_name\\';
+      const sanitizedQuery = searchQuery.replace(/[%_\\]/g, '\\$&');
+
+      mockQuerySocial.mockResolvedValueOnce({ rows: [] });
+
+      await simulateSearchProfiles(searchQuery);
+
+      expect(mockQuerySocial).toHaveBeenCalledWith(
+        expect.stringContaining('ILIKE'),
+        expect.arrayContaining([`%${sanitizedQuery}%`, expect.any(Number)])
+      );
+    });
+
+    it('should return empty array for empty query', async () => {
+      const result = await simulateSearchProfiles('');
+
+      expect(result.success).toBe(true);
+      expect(result.profiles).toEqual([]);
+      expect(mockQuerySocial).not.toHaveBeenCalled();
+    });
+
+    it('should return profiles matching search', async () => {
+      mockQuerySocial.mockResolvedValueOnce({
+        rows: [
+          { user_id: 'user-1', display_name: 'Test User', session_count: 5 }
+        ]
+      });
+
+      const result = await simulateSearchProfiles('test');
+
+      expect(result.success).toBe(true);
+      expect(result.profiles.length).toBe(1);
+    });
+  });
+
   describe('POST /social/sessions/:sessionId/comments', () => {
     it('should add comment to session', async () => {
       mockQuerySocial.mockResolvedValueOnce({ rows: [{ id: 'session-1' }] }); // Session exists
@@ -311,6 +348,25 @@ async function simulateDeleteComment(commentId: string, userId: string, isAdmin:
 
     await mockQuerySocial('DELETE FROM session_comments WHERE id = $1', [commentId]);
     return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+async function simulateSearchProfiles(query: string) {
+  try {
+    if (!query || typeof query !== 'string' || query.trim() === '') {
+      return { success: true, profiles: [] };
+    }
+
+    const sanitizedQuery = query.replace(/[%_\\]/g, '\\$&');
+
+    const result = await mockQuerySocial(
+      `SELECT * FROM profiles WHERE display_name ILIKE $1 OR bio ILIKE $1 LIMIT $2`,
+      [`%${sanitizedQuery}%`, 50]
+    );
+
+    return { success: true, profiles: result.rows };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
