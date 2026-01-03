@@ -103,8 +103,8 @@ export const api = {
       });
     },
 
-    checkAdmin: async (userId: string) => {
-      return request(`/auth/check-admin/${userId}`);
+    checkAdmin: async () => {
+      return request('/auth/check-admin');
     },
   },
   

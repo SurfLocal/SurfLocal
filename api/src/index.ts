@@ -25,12 +25,13 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Rate limiting disabled for development
-// const limiter = rateLimit({
-//   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),
-//   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '1000'),
-//   message: 'Too many requests from this IP, please try again later.',
-// });
+// Rate limiting - enabled in production
+const limiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '1000'),
+  message: 'Too many requests from this IP, please try again later.',
+  skip: () => process.env.NODE_ENV !== 'production', // Skip in development
+});
 
 app.use(helmet());
 app.use(cors({
@@ -41,7 +42,7 @@ app.use(compression());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-// app.use('/api/', limiter); // Rate limiting disabled
+app.use('/api/', limiter);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

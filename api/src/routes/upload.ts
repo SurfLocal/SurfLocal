@@ -3,16 +3,27 @@ import { v4 as uuidv4 } from 'uuid';
 import { upload } from '../middleware/upload';
 import { uploadFile, deleteFile, BUCKETS, getFileUrl } from '../config/minio';
 import { asyncHandler, ApiError } from '../middleware/errorHandler';
+import { authenticate, AuthRequest } from '../middleware/auth';
 import { query } from '../config/database';
 
 const router = Router();
 
-router.post('/session-media', upload.array('files', 5), asyncHandler(async (req, res) => {
+router.post('/session-media', authenticate, upload.array('files', 5), asyncHandler(async (req: AuthRequest, res) => {
   const files = req.files as Express.Multer.File[];
-  const { session_id, user_id } = req.body;
+  const { session_id } = req.body;
+  const user_id = req.userId;
 
-  if (!session_id || !user_id) {
-    throw new ApiError(400, 'session_id and user_id are required');
+  if (!session_id) {
+    throw new ApiError(400, 'session_id is required');
+  }
+
+  // Verify session ownership
+  const sessionCheck = await query('SELECT user_id FROM sessions WHERE id = $1', [session_id]);
+  if (sessionCheck.rows.length === 0) {
+    throw new ApiError(404, 'Session not found');
+  }
+  if (sessionCheck.rows[0].user_id !== user_id) {
+    throw new ApiError(403, 'Not authorized to upload media to this session');
   }
 
   if (!files || files.length === 0) {
@@ -46,13 +57,9 @@ router.post('/session-media', upload.array('files', 5), asyncHandler(async (req,
   res.status(201).json(uploadedFiles);
 }));
 
-router.post('/avatar', upload.single('file'), asyncHandler(async (req, res) => {
+router.post('/avatar', authenticate, upload.single('file'), asyncHandler(async (req: AuthRequest, res) => {
   const file = req.file;
-  const { user_id } = req.body;
-
-  if (!user_id) {
-    throw new ApiError(400, 'user_id is required');
-  }
+  const user_id = req.userId;
 
   if (!file) {
     throw new ApiError(400, 'No file uploaded');
@@ -94,20 +101,29 @@ router.post('/avatar', upload.single('file'), asyncHandler(async (req, res) => {
   res.json({ url });
 }));
 
-router.post('/board-photo', upload.single('file'), asyncHandler(async (req, res) => {
+router.post('/board-photo', authenticate, upload.single('file'), asyncHandler(async (req: AuthRequest, res) => {
   const file = req.file;
-  const { board_id, user_id } = req.body;
+  const { board_id } = req.body;
+  const user_id = req.userId;
 
-  if (!board_id || !user_id) {
-    throw new ApiError(400, 'board_id and user_id are required');
+  if (!board_id) {
+    throw new ApiError(400, 'board_id is required');
   }
 
   if (!file) {
     throw new ApiError(400, 'No file uploaded');
   }
 
-  // Get old board photo URL to delete after uploading new one
-  const oldPhotoResult = await query('SELECT photo_url FROM boards WHERE id = $1', [board_id]);
+  // Verify board ownership
+  const boardCheck = await query('SELECT user_id, photo_url FROM boards WHERE id = $1', [board_id]);
+  if (boardCheck.rows.length === 0) {
+    throw new ApiError(404, 'Board not found');
+  }
+  if (boardCheck.rows[0].user_id !== user_id) {
+    throw new ApiError(403, 'Not authorized to upload photo to this board');
+  }
+
+  const oldPhotoResult = boardCheck;
   const oldPhotoUrl = oldPhotoResult.rows[0]?.photo_url;
 
   const fileExtension = file.originalname.split('.').pop();
@@ -144,11 +160,23 @@ router.post('/board-photo', upload.single('file'), asyncHandler(async (req, res)
   res.json({ url });
 }));
 
-router.delete('/file', asyncHandler(async (req, res) => {
+router.delete('/file', authenticate, asyncHandler(async (req: AuthRequest, res) => {
   const { bucket, objectName } = req.body;
+  const user_id = req.userId;
 
   if (!bucket || !objectName) {
     throw new ApiError(400, 'bucket and objectName are required');
+  }
+
+  // Validate bucket is one of our allowed buckets
+  const allowedBuckets = [BUCKETS.SESSION_MEDIA, BUCKETS.AVATARS, BUCKETS.BOARD_PHOTOS];
+  if (!allowedBuckets.includes(bucket)) {
+    throw new ApiError(400, 'Invalid bucket');
+  }
+
+  // Verify user owns the file by checking the path starts with their user_id
+  if (!objectName.startsWith(`${user_id}/`)) {
+    throw new ApiError(403, 'Not authorized to delete this file');
   }
 
   await deleteFile(bucket, objectName);

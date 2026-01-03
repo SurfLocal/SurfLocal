@@ -196,6 +196,9 @@ router.get('/search-profiles', asyncHandler(async (req, res) => {
     return res.json([]);
   }
   
+  // Sanitize search input - escape LIKE/ILIKE special characters
+  const sanitizedQuery = q.replace(/[%_\\]/g, '\\$&');
+  
   const result = await query(
     `SELECT p.*,
             (SELECT COUNT(*) FROM sessions WHERE user_id = p.user_id) as session_count,
@@ -206,7 +209,7 @@ router.get('/search-profiles', asyncHandler(async (req, res) => {
      WHERE p.display_name ILIKE $1 OR p.bio ILIKE $1
      ORDER BY follower_count DESC
      LIMIT $2`,
-    [`%${q}%`, limit]
+    [`%${sanitizedQuery}%`, limit]
   );
   
   res.json(result.rows);
