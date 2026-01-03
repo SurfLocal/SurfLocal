@@ -233,9 +233,9 @@ const Admin = () => {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleRemoveAdmin(u.user_id)}
+                              onClick={(e) => { (e.currentTarget as HTMLButtonElement).blur(); handleRemoveAdmin(u.user_id); }}
                               disabled={u.user_id === user?.id}
-                              className="text-orange-500 border-orange-500/30 hover:bg-orange-500/10 flex-1 sm:flex-none"
+                              className="text-orange-500 border-orange-500/30 hover:bg-orange-500/10 active:bg-orange-500/20 flex-1 sm:flex-none"
                             >
                               <ShieldOff className="h-4 w-4 mr-1" />
                               Remove Admin
@@ -244,8 +244,8 @@ const Admin = () => {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handlePromoteToAdmin(u.user_id)}
-                              className="text-green-500 border-green-500/30 hover:bg-green-500/10 flex-1 sm:flex-none"
+                              onClick={(e) => { (e.currentTarget as HTMLButtonElement).blur(); handlePromoteToAdmin(u.user_id); }}
+                              className="text-green-500 border-green-500/30 hover:bg-green-500/10 active:bg-green-500/20 flex-1 sm:flex-none"
                             >
                               <Shield className="h-4 w-4 mr-1" />
                               Make Admin
