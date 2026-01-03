@@ -213,7 +213,8 @@ router.get('/search-profiles', asyncHandler(async (req, res) => {
             (SELECT COUNT(*) FROM sessions WHERE user_id = p.user_id) as session_count,
             (SELECT COUNT(*) FROM boards WHERE user_id = p.user_id) as board_count,
             (SELECT COUNT(*) FROM follows WHERE following_id = p.user_id) as follower_count,
-            (SELECT COUNT(*) FROM follows WHERE follower_id = p.user_id) as following_count
+            (SELECT COUNT(*) FROM follows WHERE follower_id = p.user_id) as following_count,
+            EXISTS(SELECT 1 FROM user_roles WHERE user_id = p.user_id AND role = 'admin') as is_admin
      FROM profiles p
      WHERE p.display_name ILIKE $1 OR p.bio ILIKE $1
      ORDER BY follower_count DESC
