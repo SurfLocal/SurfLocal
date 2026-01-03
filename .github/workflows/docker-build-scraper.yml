@@ -62,8 +62,8 @@ jobs:
           echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_ENV
           echo "TAG_PREFIX=${TAG_PREFIX}" >> $GITHUB_ENV
 
-          # Build the Docker image for amd64 platform
-          docker buildx build --platform linux/amd64 \
+          # Build the Docker image for ARM64 platform (Raspberry Pi)
+          docker buildx build --platform linux/arm64 \
                        --build-arg DB_HOST="postgres" \
                        --build-arg DB_USER="argo_runner" \
                        --build-arg DB_PASSWORD=${{ secrets.DB_PASSWORD_ARGO }} \
@@ -79,4 +79,4 @@ jobs:
       # Step 6: Images already pushed via buildx build --push
       - name: Images pushed successfully
         run: |
-          echo "Images ${IMAGE_NAME}:${IMAGE_TAG} and ${IMAGE_NAME}:${TAG_PREFIX}-latest pushed for amd64"
+          echo "Images ${IMAGE_NAME}:${IMAGE_TAG} and ${IMAGE_NAME}:${TAG_PREFIX}-latest pushed for ARM64"
