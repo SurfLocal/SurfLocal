@@ -186,6 +186,108 @@ See `/api/README.md` for complete API documentation.
 - `npm run build:dev` - Build with development mode
 - `npm run preview` - Preview production build
 - `npm run lint` - Run ESLint
+- `npm run test` - Run tests in watch mode
+- `npm run test:run` - Run tests once
+- `npm run test:coverage` - Run tests with coverage report
+
+## Testing
+
+The app includes a comprehensive test suite using Vitest and React Testing Library.
+
+### Test Structure
+
+```
+app/tests/
+├── setup.ts                          # Vitest setup and environment config
+├── mocks/                            # Shared test mocks
+│   ├── api.ts                        # API client mocks
+│   └── auth.ts                       # Auth context mocks
+├── unit/                             # Unit tests
+│   ├── lib/
+│   │   ├── formatNumber.test.ts      # Number formatting tests
+│   │   └── utils.test.ts             # Utility function tests
+│   └── components/
+│       ├── ImageLightbox.test.tsx    # ImageLightbox component tests
+│       └── SessionCard.test.tsx      # SessionCard component tests
+└── integration/                      # Integration tests
+    ├── api.test.ts                   # API client integration tests
+    └── auth.test.tsx                 # Authentication flow tests
+```
+
+### Running Tests
+
+#### Install Test Dependencies
+
+```bash
+cd app
+npm install
+```
+
+#### Run All Tests (Watch Mode)
+
+```bash
+npm test
+```
+
+#### Run Tests Once
+
+```bash
+npm run test:run
+```
+
+#### Run Tests with Coverage
+
+```bash
+npm run test:coverage
+```
+
+#### Run Specific Test File
+
+```bash
+npm test tests/unit/lib/formatNumber.test.ts
+```
+
+#### Run Tests Matching Pattern
+
+```bash
+npm test -- --testNamePattern="formatStatNumber"
+```
+
+### Test Coverage
+
+Coverage reports are generated in the `coverage/` directory. View the HTML report by opening `coverage/index.html`.
+
+### Writing New Tests
+
+1. Place unit tests in `tests/unit/` following the source structure
+2. Place integration tests in `tests/integration/`
+3. Use the provided mocks in `tests/mocks/` for API and auth
+4. Use `@testing-library/react` for component testing
+5. Follow the existing test patterns for consistency
+
+### Test Utilities
+
+The test setup includes:
+
+- **jsdom** - DOM environment for React testing
+- **@testing-library/react** - React component testing utilities
+- **@testing-library/user-event** - User interaction simulation
+- **@testing-library/jest-dom** - Custom DOM matchers
+
+Example test:
+
+```typescript
+import { render, screen } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
+import MyComponent from '../src/components/MyComponent';
+
+describe('MyComponent', () => {
+  it('renders correctly', () => {
+    render(<MyComponent />);
+    expect(screen.getByText('Hello')).toBeInTheDocument();
+  });
+});
+```
 
 ## Deployment
 
