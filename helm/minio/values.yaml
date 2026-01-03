@@ -134,7 +134,7 @@ rbac:
 
 credentials:
   accessKey: admin
-  secretKey: fidelio!
+  secretKey: CHANGE_ME  # Update this value before deployment
 
 # ==============================================================================
 # CONFIGURATION

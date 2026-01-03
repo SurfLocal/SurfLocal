@@ -191,8 +191,8 @@ This deploys:
 
 ```bash
 helm upgrade --install salt-api ./helm/salt-api \
-  --set secrets.databasePassword=fidelio \
-  --set secrets.minioSecretKey=fidelio! \
+  --set secrets.databasePassword=<your-db-password> \
+  --set secrets.minioSecretKey=<your-minio-secret> \
   --set secrets.jwtSecret=$(openssl rand -base64 32)
 ```
 
@@ -246,7 +246,7 @@ Access the MinIO web console:
 ```
 URL: http://master:31001
 Username: admin
-Password: fidelio!
+Password: <your-minio-secret-key>
 ```
 
 ### MinIO S3 API
@@ -256,7 +256,7 @@ S3-compatible API endpoint:
 ```
 Endpoint: http://master:31000
 Access Key: admin
-Secret Key: fidelio!
+Secret Key: <your-minio-secret-key>
 ```
 
 ### Argo Workflows

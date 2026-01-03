@@ -48,7 +48,7 @@ cp .env.example .env
 | `MINIO_ENDPOINT` | MinIO endpoint | master |
 | `MINIO_PORT` | MinIO port | 31000 |
 | `MINIO_ACCESS_KEY` | MinIO access key | admin |
-| `MINIO_SECRET_KEY` | MinIO secret key | fidelio! |
+| `MINIO_SECRET_KEY` | MinIO secret key | (required) |
 | `CORS_ORIGIN` | Allowed CORS origin | http://localhost:5173 |
 
 ## Development

@@ -163,7 +163,7 @@ http://<master-node-ip>:31001
 
 **Login credentials:**
 - Access Key: `admin`
-- Secret Key: `fidelio!`
+- Secret Key: `<configured-in-values.yaml>`
 
 ### MinIO API (S3)
 
@@ -193,7 +193,7 @@ http://minio.argo.svc.cluster.local:9000
 ```bash
 aws configure --profile minio
 # AWS Access Key ID: admin
-# AWS Secret Access Key: fidelio!
+# AWS Secret Access Key: <your-minio-secret-key>
 # Default region name: us-east-1
 # Default output format: json
 
@@ -272,7 +272,7 @@ All timestamps are in UTC for consistency across the cluster.
 
 2. Open browser to http://localhost:9001
 
-3. Login with credentials (admin/fidelio!)
+3. Login with credentials (admin/<your-minio-secret-key>)
 
 4. Navigate to `argo-logs` bucket
 
@@ -402,7 +402,7 @@ ssh master 'sudo rm -rf /mnt/ssd/minio-data/*'
 | `persistence.storageClass` | Storage class name | `minio-storage` |
 | `service.type` | Service type | `NodePort` |
 | `credentials.accessKey` | MinIO access key | `admin` |
-| `credentials.secretKey` | MinIO secret key | `fidelio!` |
+| `credentials.secretKey` | MinIO secret key | `<configured-in-values.yaml>` |
 
 ## Related Documentation
 
