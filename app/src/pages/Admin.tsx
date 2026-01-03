@@ -65,7 +65,7 @@ const Admin = () => {
               const adminCheck = await api.auth.checkAdmin(p.user_id);
               return {
                 ...p,
-                is_admin: adminCheck?.isAdmin || false
+                is_admin: adminCheck?.is_admin || false
               };
             } catch (error) {
               console.error('Error checking admin status for user:', p.user_id, error);
