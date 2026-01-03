@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Search, Shield, ShieldOff, Waves, UserX, Crown } from 'lucide-react';
 import {
@@ -55,45 +55,47 @@ const Admin = () => {
     setSearching(true);
     setHasSearched(true);
 
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('user_id, display_name, bio, avatar_url')
-      .ilike('display_name', `%${searchQuery}%`)
-      .limit(20);
-
-    if (profiles && profiles.length > 0) {
-      const { data: adminRoles } = await supabase
-        .from('user_roles')
-        .select('user_id')
-        .eq('role', 'admin')
-        .in('user_id', profiles.map(p => p.user_id));
-
-      const adminUserIds = new Set(adminRoles?.map(r => r.user_id) || []);
-      
-      const results = profiles.map(p => ({
-        ...p,
-        is_admin: adminUserIds.has(p.user_id)
-      }));
-      
-      setSearchResults(results);
-    } else {
+    try {
+      const profiles = await api.profiles.search(searchQuery, 20);
+      if (profiles && profiles.length > 0) {
+        // Check admin status for each user
+        const resultsWithAdmin = await Promise.all(
+          profiles.map(async (p: any) => {
+            try {
+              const adminCheck = await api.auth.checkAdmin(p.user_id);
+              return {
+                ...p,
+                is_admin: adminCheck?.isAdmin || false
+              };
+            } catch (error) {
+              console.error('Error checking admin status for user:', p.user_id, error);
+              return {
+                ...p,
+                is_admin: false
+              };
+            }
+          })
+        );
+        setSearchResults(resultsWithAdmin);
+      } else {
+        setSearchResults([]);
+      }
+    } catch (error) {
+      console.error('Error searching users:', error);
       setSearchResults([]);
     }
     setSearching(false);
   };
 
   const handlePromoteToAdmin = async (userId: string) => {
-    const { error } = await supabase
-      .from('user_roles')
-      .insert({ user_id: userId, role: 'admin' });
-
-    if (error) {
+    try {
+      await api.admin.promoteToAdmin(userId);
+      toast({ title: 'User promoted to admin!' });
+      // Update the user in search results
+      setSearchResults(prev => prev.map(u => u.user_id === userId ? { ...u, is_admin: true } : u));
+    } catch (error) {
+      console.error('Error promoting user:', error);
       toast({ title: 'Failed to promote user', variant: 'destructive' });
-    } else {
-      toast({ title: 'User promoted to admin' });
-      setSearchResults(prev => prev.map(u => 
-        u.user_id === userId ? { ...u, is_admin: true } : u
-      ));
     }
   };
 
@@ -102,20 +104,14 @@ const Admin = () => {
       toast({ title: 'Cannot remove your own admin status', variant: 'destructive' });
       return;
     }
-
-    const { error } = await supabase
-      .from('user_roles')
-      .delete()
-      .eq('user_id', userId)
-      .eq('role', 'admin');
-
-    if (error) {
-      toast({ title: 'Failed to remove admin status', variant: 'destructive' });
-    } else {
-      toast({ title: 'Admin status removed' });
-      setSearchResults(prev => prev.map(u => 
-        u.user_id === userId ? { ...u, is_admin: false } : u
-      ));
+    try {
+      await api.admin.removeAdmin(userId);
+      toast({ title: 'Admin role removed' });
+      // Update the user in search results
+      setSearchResults(prev => prev.map(u => u.user_id === userId ? { ...u, is_admin: false } : u));
+    } catch (error) {
+      console.error('Error removing admin:', error);
+      toast({ title: 'Failed to remove admin', variant: 'destructive' });
     }
   };
 
@@ -124,23 +120,13 @@ const Admin = () => {
       toast({ title: 'Cannot delete yourself', variant: 'destructive' });
       return;
     }
-
     try {
-      // Call edge function to delete user from auth.users (cascades to all tables)
-      const { data, error } = await supabase.functions.invoke('delete-user', {
-        body: { userId }
-      });
-
-      if (error) {
-        console.error('Error deleting user:', error);
-        toast({ title: 'Failed to delete user', description: error.message, variant: 'destructive' });
-        return;
-      }
-
-      toast({ title: 'User deleted successfully' });
+      await api.admin.deleteUser(userId);
+      toast({ title: 'User deleted' });
+      // Remove the user from search results
       setSearchResults(prev => prev.filter(u => u.user_id !== userId));
-    } catch (err) {
-      console.error('Error deleting user:', err);
+    } catch (error) {
+      console.error('Error deleting user:', error);
       toast({ title: 'Failed to delete user', variant: 'destructive' });
     }
   };

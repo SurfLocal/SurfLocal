@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { Waves } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from 'date-fns';
 
@@ -28,29 +28,31 @@ const WeeklyActivityChart = ({ userId }: WeeklyActivityChartProps) => {
       // Get all days of the week
       const daysOfWeek = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
-      // Fetch sessions for this week
-      const { data: sessions } = await supabase
-        .from('sessions')
-        .select('session_date, wave_count')
-        .eq('user_id', userId)
-        .eq('is_public', true)
-        .gte('session_date', weekStart.toISOString())
-        .lte('session_date', weekEnd.toISOString());
+      try {
+        // Fetch all sessions for user and filter client-side
+        const allSessions = await api.sessions.getByUser(userId);
+        const sessions = allSessions?.filter((s: any) => {
+          const sessionDate = new Date(s.session_date);
+          return s.is_public && sessionDate >= weekStart && sessionDate <= weekEnd;
+        }) || [];
 
-      // Aggregate waves by day
-      const dayData = daysOfWeek.map(day => {
-        const dayWaves = sessions
-          ?.filter(s => isSameDay(new Date(s.session_date), day))
-          .reduce((sum, s) => sum + (s.wave_count || 0), 0) || 0;
+        // Aggregate waves by day
+        const dayData = daysOfWeek.map(day => {
+          const dayWaves = sessions
+            .filter((s: any) => isSameDay(new Date(s.session_date), day))
+            .reduce((sum: number, s: any) => sum + (s.wave_count || 0), 0);
 
-        return {
-          day: format(day, 'EEE'),
-          waves: dayWaves,
-          fullDate: day,
-        };
-      });
+          return {
+            day: format(day, 'EEE'),
+            waves: dayWaves,
+            fullDate: day,
+          };
+        });
 
-      setData(dayData);
+        setData(dayData);
+      } catch (error) {
+        console.error('Error fetching weekly data:', error);
+      }
       setLoading(false);
     };
 

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Waves, Mail, Lock } from 'lucide-react';
 
@@ -25,10 +25,13 @@ const Settings = () => {
   const updateEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setUpdating(true);
-    const { error } = await supabase.auth.updateUser({ email });
+    try {
+      // TODO: Implement email update endpoint
+      toast({ title: 'Email update not yet implemented', variant: 'destructive' });
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
     setUpdating(false);
-    if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    else { toast({ title: 'Check your email', description: 'Confirmation sent to new address.' }); setEmail(''); }
   };
 
   const updatePassword = async (e: React.FormEvent) => {
@@ -36,10 +39,13 @@ const Settings = () => {
     if (password !== confirmPassword) { toast({ title: 'Passwords do not match', variant: 'destructive' }); return; }
     if (password.length < 6) { toast({ title: 'Password must be at least 6 characters', variant: 'destructive' }); return; }
     setUpdating(true);
-    const { error } = await supabase.auth.updateUser({ password });
+    try {
+      // TODO: Implement password update endpoint (requires current password)
+      toast({ title: 'Password update not yet implemented', variant: 'destructive' });
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
     setUpdating(false);
-    if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    else { toast({ title: 'Password updated' }); setPassword(''); setConfirmPassword(''); }
   };
 
   return (

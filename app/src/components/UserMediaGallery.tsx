@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { Waves, ChevronLeft, ChevronRight, X, Play, Image as ImageIcon } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -37,42 +37,13 @@ const UserMediaGallery = ({ userId, open, onClose }: UserMediaGalleryProps) => {
     if (!userId) return;
     setLoading(true);
 
-    // First get public session IDs for this user
-    const { data: sessions } = await supabase
-      .from('sessions')
-      .select('id, location, session_date')
-      .eq('user_id', userId)
-      .eq('is_public', true);
-
-    if (!sessions || sessions.length === 0) {
+    try {
+      // TODO: Add media endpoint to backend
+      // For now, media gallery will be empty
       setMedia([]);
-      setLoading(false);
       setHasMore(false);
-      return;
-    }
-
-    const sessionIds = sessions.map(s => s.id);
-    const sessionMap = new Map(sessions.map(s => [s.id, { location: s.location, session_date: s.session_date }]));
-
-    const { data, error } = await supabase
-      .from('session_media')
-      .select('*')
-      .in('session_id', sessionIds)
-      .order('created_at', { ascending: false })
-      .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1);
-
-    if (!error && data) {
-      const mediaWithSessions = data.map(m => ({
-        ...m,
-        session: sessionMap.get(m.session_id)
-      }));
-
-      if (pageNum === 0) {
-        setMedia(mediaWithSessions);
-      } else {
-        setMedia(prev => [...prev, ...mediaWithSessions]);
-      }
-      setHasMore(data.length === PAGE_SIZE);
+    } catch (error) {
+      console.error('Error fetching media:', error);
     }
     setLoading(false);
   }, [userId]);

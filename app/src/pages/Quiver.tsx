@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
@@ -7,9 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Waves, Trash2, Camera, Loader2, MapPin, Clock } from 'lucide-react';
+import { Plus, Waves, Trash2, Camera, Loader2, MapPin, Clock, ChevronLeft } from 'lucide-react';
 import ImageLightbox from '@/components/ImageLightbox';
 
 interface Board {
@@ -31,8 +31,10 @@ interface BoardStats {
 }
 
 const Quiver = () => {
+  const { userId: paramUserId } = useParams<{ userId?: string }>();
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const [boards, setBoards] = useState<Board[]>([]);
   const [boardStats, setBoardStats] = useState<Map<string, BoardStats>>(new Map());
@@ -41,7 +43,11 @@ const Quiver = () => {
   const [uploadingPhoto, setUploadingPhoto] = useState<string | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxBoardId, setLightboxBoardId] = useState<string | null>(null);
+  const [profileName, setProfileName] = useState<string>('');
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+  
+  // Get specific board ID from URL hash (e.g., /quiver/userId#boardId)
+  const focusedBoardId = location.hash ? location.hash.slice(1) : null;
   const [formData, setFormData] = useState({
     name: '',
     brand: '',
@@ -52,108 +58,126 @@ const Quiver = () => {
     board_type: ''
   });
 
+  // Determine which user's quiver we're viewing
+  const viewingUserId = paramUserId || user?.id;
+  const isOwnQuiver = !paramUserId || paramUserId === user?.id;
+
   useEffect(() => {
     if (!loading && !user) navigate('/auth');
   }, [user, loading, navigate]);
 
   useEffect(() => {
     const fetchBoards = async () => {
-      if (!user) return;
-      const { data } = await supabase
-        .from('boards')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-      if (data) setBoards(data);
+      if (!user || !viewingUserId) return;
+      try {
+        const data = await api.boards.getByUser(viewingUserId);
+        if (data) setBoards(data);
+        
+        // Fetch profile name if viewing another user's quiver
+        if (!isOwnQuiver) {
+          const profile = await api.profiles.getByUserId(viewingUserId);
+          setProfileName(profile?.display_name || 'Surfer');
+        }
+      } catch (error) {
+        console.error('Error fetching boards:', error);
+      }
       setLoadingData(false);
     };
     if (user) fetchBoards();
-  }, [user]);
+  }, [user, viewingUserId, isOwnQuiver]);
 
-  // Fetch board stats
+  // Fetch board stats - TODO: Add backend endpoint for board statistics
   useEffect(() => {
     const fetchBoardStats = async () => {
-      if (!user || boards.length === 0) return;
+      if (!user || boards.length === 0 || !viewingUserId) return;
 
-      const boardIds = boards.map(b => b.id);
-      
-      // Fetch all sessions that used these boards - include duration_minutes
-      const { data: sessions } = await supabase
-        .from('sessions')
-        .select('id, board_id, wave_count, location, session_date, created_at, duration_minutes')
-        .eq('user_id', user.id)
-        .in('board_id', boardIds);
+      try {
+        // Fetch sessions to calculate board stats
+        const sessions = await api.sessions.getByUser(viewingUserId);
+        if (!sessions) return;
 
-      if (!sessions) return;
+        const boardIds = boards.map(b => b.id);
+        const statsMap = new Map<string, BoardStats>();
 
-      const statsMap = new Map<string, BoardStats>();
+        boardIds.forEach(boardId => {
+          const boardSessions = sessions.filter((s: any) => s.board_id === boardId);
+          
+          // Calculate waves caught
+          const wavesCaught = boardSessions.reduce((sum: number, s: any) => sum + (s.wave_count || 0), 0);
+          
+          // Calculate hours surfed from actual duration_minutes
+          const totalMinutes = boardSessions.reduce((sum: number, s: any) => sum + (s.duration_minutes || 0), 0);
+          const hoursSurfed = totalMinutes / 60;
+          
+          // Find most surfed spot
+          const spotCounts = new Map<string, number>();
+          boardSessions.forEach((s: any) => {
+            const count = spotCounts.get(s.location) || 0;
+            spotCounts.set(s.location, count + 1);
+          });
+          
+          let mostSurfedSpot: string | null = null;
+          let maxCount = 0;
+          spotCounts.forEach((count, spot) => {
+            if (count > maxCount) {
+              maxCount = count;
+              mostSurfedSpot = spot;
+            }
+          });
 
-      boardIds.forEach(boardId => {
-        const boardSessions = sessions.filter(s => s.board_id === boardId);
-        
-        // Calculate waves caught
-        const wavesCaught = boardSessions.reduce((sum, s) => sum + (s.wave_count || 0), 0);
-        
-        // Calculate hours surfed from actual duration_minutes
-        const totalMinutes = boardSessions.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
-        const hoursSurfed = totalMinutes / 60;
-        
-        // Find most surfed spot
-        const spotCounts = new Map<string, number>();
-        boardSessions.forEach(s => {
-          const count = spotCounts.get(s.location) || 0;
-          spotCounts.set(s.location, count + 1);
+          statsMap.set(boardId, {
+            waves_caught: wavesCaught,
+            hours_surfed: hoursSurfed,
+            most_surfed_spot: mostSurfedSpot,
+          });
         });
-        
-        let mostSurfedSpot: string | null = null;
-        let maxCount = 0;
-        spotCounts.forEach((count, spot) => {
-          if (count > maxCount) {
-            maxCount = count;
-            mostSurfedSpot = spot;
-          }
-        });
 
-        statsMap.set(boardId, {
-          waves_caught: wavesCaught,
-          hours_surfed: hoursSurfed,
-          most_surfed_spot: mostSurfedSpot,
-        });
-      });
-
-      setBoardStats(statsMap);
+        setBoardStats(statsMap);
+      } catch (error) {
+        console.error('Error fetching board stats:', error);
+      }
     };
 
     fetchBoardStats();
-  }, [user, boards]);
+  }, [user, boards, viewingUserId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     
-    const { data, error } = await supabase.from('boards').insert({
-      user_id: user.id,
-      name: formData.name,
-      brand: formData.brand || null,
-      model: formData.model || null,
-      length_feet: formData.length_feet ? parseInt(formData.length_feet) : null,
-      length_inches: formData.length_inches ? parseInt(formData.length_inches) : null,
-      volume_liters: formData.volume_liters ? parseFloat(formData.volume_liters) : null,
-      board_type: formData.board_type || null
-    }).select().single();
+    try {
+      const data = await api.boards.create({
+        user_id: user.id,
+        name: formData.name,
+        brand: formData.brand || null,
+        model: formData.model || null,
+        length_feet: formData.length_feet ? parseInt(formData.length_feet) : null,
+        length_inches: formData.length_inches ? parseInt(formData.length_inches) : null,
+        volume_liters: formData.volume_liters ? parseFloat(formData.volume_liters) : null,
+        board_type: formData.board_type || null
+      });
 
-    if (!error && data) {
-      setBoards([data, ...boards]);
-      setDialogOpen(false);
-      setFormData({ name: '', brand: '', model: '', length_feet: '', length_inches: '', volume_liters: '', board_type: '' });
-      toast({ title: 'Board added!' });
+      if (data) {
+        setBoards([data, ...boards]);
+        setDialogOpen(false);
+        setFormData({ name: '', brand: '', model: '', length_feet: '', length_inches: '', volume_liters: '', board_type: '' });
+        toast({ title: 'Board added!' });
+      }
+    } catch (error) {
+      console.error('Error adding board:', error);
+      toast({ title: 'Failed to add board', variant: 'destructive' });
     }
   };
 
   const deleteBoard = async (id: string) => {
-    await supabase.from('boards').delete().eq('id', id);
-    setBoards(boards.filter(b => b.id !== id));
-    toast({ title: 'Board removed' });
+    try {
+      await api.boards.delete(id);
+      setBoards(boards.filter(b => b.id !== id));
+      toast({ title: 'Board removed' });
+    } catch (error) {
+      console.error('Error deleting board:', error);
+      toast({ title: 'Failed to delete board', variant: 'destructive' });
+    }
   };
 
   const handlePhotoUpload = async (boardId: string, file: File) => {
@@ -161,31 +185,15 @@ const Quiver = () => {
     
     setUploadingPhoto(boardId);
     
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${user.id}/${boardId}-${Date.now()}.${fileExt}`;
-    
-    const { error: uploadError } = await supabase.storage
-      .from('board-photos')
-      .upload(fileName, file);
-
-    if (uploadError) {
-      toast({ title: 'Upload failed', description: uploadError.message, variant: 'destructive' });
-      setUploadingPhoto(null);
-      return;
-    }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('board-photos')
-      .getPublicUrl(fileName);
-
-    const { error: updateError } = await supabase
-      .from('boards')
-      .update({ photo_url: publicUrl })
-      .eq('id', boardId);
-
-    if (!updateError) {
-      setBoards(boards.map(b => b.id === boardId ? { ...b, photo_url: publicUrl } : b));
-      toast({ title: 'Photo uploaded!' });
+    try {
+      const result = await api.upload.boardPhoto(file, boardId, user.id);
+      if (result?.url) {
+        setBoards(boards.map(b => b.id === boardId ? { ...b, photo_url: result.url } : b));
+        toast({ title: 'Photo uploaded!' });
+      }
+    } catch (error) {
+      console.error('Error uploading photo:', error);
+      toast({ title: 'Upload failed', variant: 'destructive' });
     }
     
     setUploadingPhoto(null);
@@ -210,18 +218,41 @@ const Quiver = () => {
   return (
     <Layout allowScroll>
       <div className="container mx-auto px-4 py-8">
+        {/* Show "View All Boards" when viewing a single board, otherwise show "Back to Profile/Sessions" */}
+        {focusedBoardId && boards.some(b => b.id === focusedBoardId) ? (
+          <Button
+            variant="ghost"
+            className="mb-4 gap-2"
+            onClick={() => navigate(paramUserId ? `/quiver/${paramUserId}` : '/quiver')}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            View All Boards
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            className="mb-4 gap-2"
+            onClick={() => navigate(isOwnQuiver ? '/sessions' : `/profile/${viewingUserId}`)}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            {isOwnQuiver ? 'Back to Sessions' : 'Back to Profile'}
+          </Button>
+        )}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">Quiver</h1>
+            <h1 className="text-3xl font-bold text-foreground mb-2">
+              {isOwnQuiver ? 'Your Quiver' : `${profileName}'s Quiver`}
+            </h1>
             <p className="text-muted-foreground">{boards.length} board{boards.length !== 1 ? 's' : ''}</p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" />
-                Add Board
-              </Button>
-            </DialogTrigger>
+          {isOwnQuiver && (
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Add Board
+                </Button>
+              </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Add Board</DialogTitle>
@@ -295,7 +326,8 @@ const Quiver = () => {
                 <Button type="submit" className="w-full">Add Board</Button>
               </form>
             </DialogContent>
-          </Dialog>
+            </Dialog>
+          )}
         </div>
 
         {loadingData ? (
@@ -307,16 +339,20 @@ const Quiver = () => {
             <CardContent className="flex flex-col items-center py-16">
               <Waves className="h-16 w-16 text-muted-foreground/40 mb-4" />
               <h3 className="text-xl font-semibold mb-2">No boards yet</h3>
-              <p className="text-muted-foreground mb-6">Add your boards to link them to sessions.</p>
-              <Button onClick={() => setDialogOpen(true)} className="gap-2">
-                <Plus className="h-4 w-4" />
-                Add Your First Board
-              </Button>
+              <p className="text-muted-foreground mb-6">
+                {isOwnQuiver ? 'Add your boards to link them to sessions.' : 'This surfer hasn\'t added any boards yet.'}
+              </p>
+              {isOwnQuiver && (
+                <Button onClick={() => setDialogOpen(true)} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Add Your First Board
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {boards.map((board) => {
+            {(focusedBoardId ? boards.filter(b => b.id === focusedBoardId) : boards).map((board) => {
               const stats = boardStats.get(board.id);
               return (
                 <Card key={board.id} className="overflow-hidden">
@@ -342,28 +378,32 @@ const Quiver = () => {
                       </div>
                     )}
                     
-                    {/* Photo upload overlay */}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      ref={(el) => { fileInputRefs.current[board.id] = el; }}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handlePhotoUpload(board.id, file);
-                      }}
-                    />
-                    <button
-                      onClick={() => fileInputRefs.current[board.id]?.click()}
-                      disabled={uploadingPhoto === board.id}
-                      className="absolute bottom-3 right-3 bg-background/80 backdrop-blur-sm hover:bg-background rounded-full p-2 transition-colors"
-                    >
-                      {uploadingPhoto === board.id ? (
-                        <Loader2 className="h-5 w-5 animate-spin text-foreground" />
-                      ) : (
-                        <Camera className="h-5 w-5 text-foreground" />
-                      )}
-                    </button>
+                    {/* Photo upload overlay - only show for own quiver */}
+                    {isOwnQuiver && (
+                      <>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          ref={(el) => { fileInputRefs.current[board.id] = el; }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handlePhotoUpload(board.id, file);
+                          }}
+                        />
+                        <button
+                          onClick={() => fileInputRefs.current[board.id]?.click()}
+                          disabled={uploadingPhoto === board.id}
+                          className="absolute bottom-3 right-3 bg-background/80 backdrop-blur-sm hover:bg-background rounded-full p-2 transition-colors"
+                        >
+                          {uploadingPhoto === board.id ? (
+                            <Loader2 className="h-5 w-5 animate-spin text-foreground" />
+                          ) : (
+                            <Camera className="h-5 w-5 text-foreground" />
+                          )}
+                        </button>
+                      </>
+                    )}
                   </div>
 
                   <CardHeader className="flex flex-row items-start justify-between pb-2">
@@ -375,9 +415,11 @@ const Quiver = () => {
                         </CardDescription>
                       )}
                     </div>
-                    <Button variant="ghost" size="icon" onClick={() => deleteBoard(board.id)}>
-                      <Trash2 className="h-4 w-4 text-muted-foreground" />
-                    </Button>
+                    {isOwnQuiver && (
+                      <Button variant="ghost" size="icon" onClick={() => deleteBoard(board.id)}>
+                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    )}
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="flex gap-4 text-sm text-muted-foreground">

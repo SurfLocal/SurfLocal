@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { Flame } from 'lucide-react';
 import { format, differenceInDays, parseISO, startOfDay } from 'date-fns';
 
@@ -18,102 +18,100 @@ const StreakPanel = ({ userId, onStreakUpdated, onStreakCalculated }: StreakPane
     const calculateStreak = async () => {
       if (!userId) return;
 
-      // Fetch all session dates for the user, ordered by date descending
-      const { data: sessions } = await supabase
-        .from('sessions')
-        .select('session_date')
-        .eq('user_id', userId)
-        .order('session_date', { ascending: false });
+      try {
+        // Fetch all sessions for the user
+        const sessions = await api.sessions.getByUser(userId);
 
-      if (!sessions || sessions.length === 0) {
-        setCurrentStreak(0);
-        setLoading(false);
-        return;
-      }
-
-      // Get unique dates (a user might have multiple sessions per day)
-      const uniqueDates = [...new Set(sessions.map(s => s.session_date))].map(d => startOfDay(parseISO(d)));
-      uniqueDates.sort((a, b) => b.getTime() - a.getTime()); // Most recent first
-
-      const today = startOfDay(new Date());
-      let streak = 0;
-      let checkDate = today;
-
-      // Check if the most recent session is today or yesterday
-      const mostRecentDate = uniqueDates[0];
-      const daysSinceLast = differenceInDays(today, mostRecentDate);
-
-      // If most recent session is more than 1 day ago, streak is broken
-      if (daysSinceLast > 1) {
-        setCurrentStreak(0);
-        setLoading(false);
-        return;
-      }
-
-      // Start from the most recent session date
-      checkDate = mostRecentDate;
-      
-      for (let i = 0; i < uniqueDates.length; i++) {
-        const sessionDate = uniqueDates[i];
-        const expectedDate = new Date(checkDate);
-        expectedDate.setDate(expectedDate.getDate() - (i === 0 ? 0 : 1));
-        
-        const diff = differenceInDays(checkDate, sessionDate);
-        
-        if (i === 0) {
-          streak = 1;
-          checkDate = sessionDate;
-        } else if (diff === 1) {
-          streak++;
-          checkDate = sessionDate;
-        } else if (diff === 0) {
-          // Same day, continue
-          continue;
-        } else {
-          // Gap found, streak is broken
-          break;
+        if (!sessions || sessions.length === 0) {
+          setCurrentStreak(0);
+          setLoading(false);
+          return;
         }
-      }
 
-      // A streak needs at least 2 days
-      const finalStreak = streak >= 2 ? streak : 0;
-      setCurrentStreak(finalStreak);
+        // Sort by date descending
+        const sortedSessions = [...sessions].sort((a: any, b: any) => 
+          new Date(b.session_date).getTime() - new Date(a.session_date).getTime()
+        );
 
-      // Fetch profile to get or compare longest streak
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('longest_streak, longest_streak_start')
-        .eq('user_id', userId)
-        .maybeSingle();
+        // Get unique dates (a user might have multiple sessions per day)
+        const uniqueDates = [...new Set(sortedSessions.map((s: any) => s.session_date))].map(d => startOfDay(parseISO(d as string)));
+        uniqueDates.sort((a, b) => b.getTime() - a.getTime()); // Most recent first
 
-      // Calculate the actual longest streak (max of stored and current)
-      const storedLongest = profile?.longest_streak || 0;
-      const actualLongest = Math.max(storedLongest, finalStreak);
-      setLongestStreak(actualLongest);
+        const today = startOfDay(new Date());
+        let streak = 0;
+        let checkDate = today;
 
-      // Notify parent of calculated values
-      onStreakCalculated?.(finalStreak, actualLongest);
+        // Check if the most recent session is today or yesterday
+        const mostRecentDate = uniqueDates[0];
+        const daysSinceLast = differenceInDays(today, mostRecentDate);
 
-      // Only try to update if current streak beats stored AND we're viewing our own profile
-      // (RLS will block updates to other users' profiles anyway)
-      if (profile && finalStreak > storedLongest) {
-        // Calculate when this streak started
-        const streakStartDate = new Date(uniqueDates[0]);
-        streakStartDate.setDate(streakStartDate.getDate() - (finalStreak - 1));
-        const formattedDate = format(streakStartDate, 'yyyy-MM-dd');
-        
-        const { error } = await supabase
-          .from('profiles')
-          .update({
-            longest_streak: finalStreak,
-            longest_streak_start: formattedDate,
-          })
-          .eq('user_id', userId);
-
-        // Only notify if update succeeded (user viewing own profile)
-        if (!error) {
-          onStreakUpdated?.(finalStreak, formattedDate);
+        // If most recent session is more than 1 day ago, streak is broken
+        if (daysSinceLast > 1) {
+          setCurrentStreak(0);
+          setLoading(false);
+          return;
         }
+
+        // Start from the most recent session date
+        checkDate = mostRecentDate;
+        
+        for (let i = 0; i < uniqueDates.length; i++) {
+          const sessionDate = uniqueDates[i];
+          const expectedDate = new Date(checkDate);
+          expectedDate.setDate(expectedDate.getDate() - (i === 0 ? 0 : 1));
+          
+          const diff = differenceInDays(checkDate, sessionDate);
+          
+          if (i === 0) {
+            streak = 1;
+            checkDate = sessionDate;
+          } else if (diff === 1) {
+            streak++;
+            checkDate = sessionDate;
+          } else if (diff === 0) {
+            // Same day, continue
+            continue;
+          } else {
+            // Gap found, streak is broken
+            break;
+          }
+        }
+
+        // A streak needs at least 2 days
+        const finalStreak = streak >= 2 ? streak : 0;
+        setCurrentStreak(finalStreak);
+
+        // Fetch profile to get or compare longest streak
+        const profile = await api.profiles.getByUserId(userId);
+
+        // Calculate the actual longest streak (max of stored and current)
+        const storedLongest = profile?.longest_streak || 0;
+        const actualLongest = Math.max(storedLongest, finalStreak);
+        setLongestStreak(actualLongest);
+
+        // Notify parent of calculated values
+        onStreakCalculated?.(finalStreak, actualLongest);
+
+        // Only try to update if current streak beats stored
+        if (profile?.id && finalStreak > storedLongest) {
+          // Calculate when this streak started
+          const streakStartDate = new Date(uniqueDates[0]);
+          streakStartDate.setDate(streakStartDate.getDate() - (finalStreak - 1));
+          const formattedDate = format(streakStartDate, 'yyyy-MM-dd');
+          
+          try {
+            await api.profiles.update(profile.id, {
+              longest_streak: finalStreak,
+              longest_streak_start: formattedDate,
+            });
+            onStreakUpdated?.(finalStreak, formattedDate);
+          } catch (updateError) {
+            // Update failed, likely viewing someone else's profile
+            console.error('Could not update streak:', updateError);
+          }
+        }
+      } catch (error) {
+        console.error('Error calculating streak:', error);
       }
 
       setLoading(false);

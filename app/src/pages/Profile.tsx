@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Waves, User, Camera } from 'lucide-react';
 
@@ -34,38 +34,43 @@ const Profile = () => {
   // Fetch spots for home break dropdown (deduplicated by name)
   useEffect(() => {
     const fetchSpots = async () => {
-      const { data } = await supabase
-        .from('spots')
-        .select('id, name')
-        .order('name');
-      if (data) {
-        // Deduplicate by name, keeping only the first occurrence
-        const uniqueSpots = data.reduce((acc: Spot[], spot) => {
-          if (!acc.some(s => s.name === spot.name)) {
-            acc.push(spot);
-          }
-          return acc;
-        }, []);
-        setSpots(uniqueSpots);
+      try {
+        const data = await api.spots.getAll();
+        if (data) {
+          // Deduplicate by name, keeping only the first occurrence
+          const uniqueSpots = data.reduce((acc: Spot[], spot: Spot) => {
+            if (!acc.some(s => s.name === spot.name)) {
+              acc.push(spot);
+            }
+            return acc;
+          }, []);
+          setSpots(uniqueSpots);
+        }
+      } catch (error) {
+        console.error('Error fetching spots:', error);
       }
     };
     fetchSpots();
   }, []);
 
   useEffect(() => {
-    const fetch = async () => {
+    const fetchProfile = async () => {
       if (!user) return;
-      const { data } = await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle();
-      if (data) setProfile({ 
-        display_name: data.display_name || '', 
-        bio: data.bio || '', 
-        home_break: data.home_break || '', 
-        years_surfing: data.years_surfing?.toString() || '',
-        avatar_url: data.avatar_url || ''
-      });
+      try {
+        const data = await api.profiles.getByUserId(user.id);
+        if (data) setProfile({ 
+          display_name: data.display_name || '', 
+          bio: data.bio || '', 
+          home_break: data.home_break || '', 
+          years_surfing: data.years_surfing?.toString() || '',
+          avatar_url: data.avatar_url || ''
+        });
+      } catch (error) {
+        console.error('Error fetching profile:', error);
+      }
       setLoadingProfile(false);
     };
-    if (user) fetch();
+    if (user) fetchProfile();
   }, [user]);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -73,30 +78,14 @@ const Profile = () => {
     if (!file || !user) return;
 
     setUploadingAvatar(true);
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${user.id}/avatar.${fileExt}`;
-
-    // Delete old avatar if exists
-    await supabase.storage.from('avatars').remove([`${user.id}/avatar.jpg`, `${user.id}/avatar.png`, `${user.id}/avatar.webp`]);
-
-    const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, file, { upsert: true });
-
-    if (uploadError) {
-      toast({ title: 'Upload failed', description: uploadError.message, variant: 'destructive' });
-      setUploadingAvatar(false);
-      return;
-    }
-
-    const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
-    const avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`;
-
-    const { error: updateError } = await supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('user_id', user.id);
-
-    if (updateError) {
-      toast({ title: 'Failed to save avatar', variant: 'destructive' });
-    } else {
+    try {
+      const result = await api.upload.avatar(file, user.id);
+      const avatarUrl = `${result.url}?t=${Date.now()}`;
       setProfile({ ...profile, avatar_url: avatarUrl });
       toast({ title: 'Avatar updated!' });
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      toast({ title: 'Upload failed', variant: 'destructive' });
     }
     setUploadingAvatar(false);
   };
@@ -105,15 +94,23 @@ const Profile = () => {
     e.preventDefault();
     if (!user) return;
     setSaving(true);
-    const { error } = await supabase.from('profiles').update({ 
-      display_name: profile.display_name || null, 
-      bio: profile.bio || null, 
-      home_break: profile.home_break || null, 
-      years_surfing: profile.years_surfing ? parseInt(profile.years_surfing) : null 
-    }).eq('user_id', user.id);
+    try {
+      // Get the profile ID first, then update
+      const profileData = await api.profiles.getByUserId(user.id);
+      if (profileData?.id) {
+        await api.profiles.update(profileData.id, { 
+          display_name: profile.display_name || null, 
+          bio: profile.bio || null, 
+          home_break: profile.home_break || null, 
+          years_surfing: profile.years_surfing ? parseInt(profile.years_surfing) : null 
+        });
+        toast({ title: 'Profile updated!' });
+      }
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      toast({ title: 'Error saving', variant: 'destructive' });
+    }
     setSaving(false);
-    if (error) toast({ title: 'Error saving', variant: 'destructive' });
-    else toast({ title: 'Profile updated!' });
   };
 
   if (loading || !user || loadingProfile) return <Layout><div className="flex items-center justify-center min-h-[60vh]"><Waves className="h-8 w-8 animate-pulse text-primary" /></div></Layout>;

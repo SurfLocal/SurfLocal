@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,19 +29,19 @@ const ResetPassword = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Check if we have a valid recovery session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setIsValidSession(true);
-      } else {
-        toast({
-          title: 'Invalid or expired link',
-          description: 'Please request a new password reset link.',
-          variant: 'destructive',
-        });
-        navigate('/auth');
-      }
-    });
+    // Check if we have a valid recovery token in URL
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (token) {
+      setIsValidSession(true);
+    } else {
+      toast({
+        title: 'Invalid or expired link',
+        description: 'Please request a new password reset link.',
+        variant: 'destructive',
+      });
+      navigate('/auth');
+    }
   }, [navigate, toast]);
 
   const validateForm = () => {
@@ -70,22 +70,27 @@ const ResetPassword = () => {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.updateUser({ password });
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
       
-      if (error) {
-        toast({
-          title: 'Error resetting password',
-          description: error.message,
-          variant: 'destructive',
-        });
-      } else {
-        toast({
-          title: 'Password updated!',
-          description: 'You can now sign in with your new password.',
-        });
-        await supabase.auth.signOut();
-        navigate('/auth');
+      if (!token) {
+        throw new Error('No reset token found');
       }
+      
+      await api.auth.confirmReset(token, password);
+      
+      toast({
+        title: 'Password updated!',
+        description: 'You can now sign in with your new password.',
+      });
+      api.auth.signOut();
+      navigate('/auth');
+    } catch (error: any) {
+      toast({
+        title: 'Error resetting password',
+        description: error.message || 'Failed to reset password',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }

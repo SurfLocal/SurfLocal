@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { MapPin, MessageCircle, Send, ChevronDown, ChevronUp, Waves, Calendar, Wind, Navigation, Clock, Trash2, Droplets } from 'lucide-react';
 import SurfboardIcon from './icons/SurfboardIcon';
@@ -39,12 +39,13 @@ interface BoardDetails {
   photo_url: string | null;
 }
 
-interface SwellData {
-  swell_height: number | null;
+interface SwellSignature {
+  swell_height: string | null;
+  swell_period: number | null;
   swell_direction: string | null;
   wind_speed: number | null;
   wind_direction: string | null;
-  tide_height: number | null;
+  tide_height: string | null;
 }
 
 interface SessionCardProps {
@@ -73,11 +74,13 @@ interface SessionCardProps {
     kooks_count: number;
     is_kooked: boolean;
     media: SessionMedia[];
+    swell_signature?: SwellSignature | null;
   };
   currentUserId: string;
   onLike: (sessionId: string, isLiked: boolean) => void;
   onKook: (sessionId: string, isKooked: boolean) => void;
   onCommentAdded: (sessionId: string) => void;
+  onCommentDeleted?: (sessionId: string) => void;
   onDelete?: (sessionId: string) => void;
 }
 
@@ -99,7 +102,7 @@ const getRatingColor = (rating: string | null) => {
   }
 };
 
-const SessionCard = ({ session, currentUserId, onLike, onKook, onCommentAdded, onDelete }: SessionCardProps) => {
+const SessionCard = ({ session, currentUserId, onLike, onKook, onCommentAdded, onCommentDeleted, onDelete }: SessionCardProps) => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [showComments, setShowComments] = useState(false);
@@ -111,57 +114,38 @@ const SessionCard = ({ session, currentUserId, onLike, onKook, onCommentAdded, o
   const [boardModalOpen, setBoardModalOpen] = useState(false);
   const [boardDetails, setBoardDetails] = useState<BoardDetails | null>(null);
   const [loadingBoard, setLoadingBoard] = useState(false);
-  const [swellData, setSwellData] = useState<SwellData | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
   // Check admin status
   useEffect(() => {
     const checkAdmin = async () => {
-      if (!currentUserId) return;
-      const { data } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', currentUserId)
-        .eq('role', 'admin')
-        .maybeSingle();
-      setIsAdmin(!!data);
+      try {
+        const result = await api.auth.checkAdmin(currentUserId);
+        setIsAdmin(result?.isAdmin || false);
+      } catch (error) {
+        console.error('Error checking admin status:', error);
+        setIsAdmin(false);
+      }
     };
     checkAdmin();
   }, [currentUserId]);
 
-  useEffect(() => {
-    const fetchSwellData = async () => {
-      const { data } = await supabase
-        .from('session_swell_data')
-        .select('swell_height, swell_direction, wind_speed, wind_direction, tide_height')
-        .eq('session_id', session.id)
-        .maybeSingle();
-      
-      if (data) setSwellData(data);
-    };
-    fetchSwellData();
-  }, [session.id]);
-
-  const fetchComments = async () => {
-    if (comments.length > 0) return;
+  const fetchComments = async (force = false) => {
+    if (comments.length > 0 && !force) return;
     setLoadingComments(true);
     
-    const { data } = await supabase
-      .from('session_comments')
-      .select('id, content, created_at, user_id')
-      .eq('session_id', session.id)
-      .order('created_at', { ascending: true });
-
-    if (data) {
-      const enriched = await Promise.all(data.map(async (c) => {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('display_name')
-          .eq('user_id', c.user_id)
-          .maybeSingle();
-        return { ...c, profile };
-      }));
-      setComments(enriched);
+    try {
+      const data = await api.social.getComments(session.id);
+      if (data) {
+        // Backend should return comments with profile info
+        const enriched = data.map((c: any) => ({
+          ...c,
+          profile: { display_name: c.display_name || 'Surfer' }
+        }));
+        setComments(enriched);
+      }
+    } catch (error) {
+      console.error('Error fetching comments:', error);
     }
     setLoadingComments(false);
   };
@@ -171,21 +155,23 @@ const SessionCard = ({ session, currentUserId, onLike, onKook, onCommentAdded, o
     if (!boardId || boardDetails) return;
     
     setLoadingBoard(true);
-    const { data } = await supabase
-      .from('boards')
-      .select('*')
-      .eq('id', boardId)
-      .maybeSingle();
-    
-    if (data) {
-      setBoardDetails(data);
+    try {
+      const data = await api.boards.getById(boardId);
+      if (data) {
+        setBoardDetails(data);
+      }
+    } catch (error) {
+      console.error('Error fetching board details:', error);
     }
     setLoadingBoard(false);
   };
 
   const handleBoardClick = () => {
-    fetchBoardDetails();
-    setBoardModalOpen(true);
+    const boardId = session.board?.id || session.board_id;
+    if (boardId) {
+      // Navigate to the quiver page with the board highlighted
+      navigate(`/quiver/${session.user_id}#${boardId}`);
+    }
   };
 
   const handleToggleComments = () => {
@@ -196,22 +182,16 @@ const SessionCard = ({ session, currentUserId, onLike, onKook, onCommentAdded, o
   const handleSubmitComment = async () => {
     if (!commentInput.trim()) return;
     
-    const { error } = await supabase
-      .from('session_comments')
-      .insert({ session_id: session.id, user_id: currentUserId, content: commentInput });
-
-    if (!error) {
-      const newComment: SessionComment = {
-        id: crypto.randomUUID(),
-        content: commentInput,
-        created_at: new Date().toISOString(),
-        user_id: currentUserId,
-        profile: { display_name: 'You' }
-      };
-      setComments([...comments, newComment]);
+    try {
+      await api.social.addComment(session.id, currentUserId, commentInput);
       setCommentInput('');
       onCommentAdded(session.id);
+      // Refetch comments to get the actual comment with proper data
+      await fetchComments(true);
       toast({ title: 'Comment added!' });
+    } catch (error: any) {
+      console.error('Error adding comment:', error);
+      toast({ title: error?.message || 'Failed to add comment', variant: 'destructive' });
     }
   };
 
@@ -219,15 +199,15 @@ const SessionCard = ({ session, currentUserId, onLike, onKook, onCommentAdded, o
     // Allow deletion if user owns the comment OR is admin
     if (currentUserId !== commentUserId && !isAdmin) return;
     
-    const { error } = await supabase
-      .from('session_comments')
-      .delete()
-      .eq('id', commentId);
-    
-    if (!error) {
+    try {
+      await api.social.deleteComment(commentId);
       setComments(comments.filter(c => c.id !== commentId));
+      if (onCommentDeleted) {
+        onCommentDeleted(session.id);
+      }
       toast({ title: 'Comment deleted' });
-    } else {
+    } catch (error) {
+      console.error('Error deleting comment:', error);
       toast({ title: 'Failed to delete comment', variant: 'destructive' });
     }
   };
@@ -321,31 +301,50 @@ const SessionCard = ({ session, currentUserId, onLike, onKook, onCommentAdded, o
             )}
           </div>
 
-          {/* Swell Signature - moved above user stats */}
-          {swellData && (
+          {/* Swell Signature */}
+          {session.swell_signature && (
             <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
               <p className="text-xs font-semibold text-primary mb-2 uppercase tracking-wide">Swell Signature</p>
               <div className="flex flex-wrap gap-4 text-sm">
                 <div className="flex items-center gap-1.5">
                   <Waves className="h-4 w-4 text-primary" />
                   <span className="text-foreground">
-                    {swellData.swell_height ? `${swellData.swell_height} ft` : '—'} @ {swellData.swell_direction || '—'}
+                    {session.swell_signature.swell_height || '—'}
+                    {session.swell_signature.swell_period ? ` ${session.swell_signature.swell_period}s` : ''}
+                    {session.swell_signature.swell_direction ? ` ${session.swell_signature.swell_direction}` : ''}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Wind className="h-4 w-4 text-muted-foreground" />
                   <span className="text-foreground">
-                    {swellData.wind_speed ? `${swellData.wind_speed} kts` : '— kts'} {swellData.wind_direction || '—'}
+                    {session.swell_signature.wind_speed ? `${session.swell_signature.wind_speed} kts` : '—'}
+                    {session.swell_signature.wind_direction ? ` ${session.swell_signature.wind_direction}` : ''}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Droplets className="h-4 w-4 text-muted-foreground" />
                   <span className="text-foreground">
-                    {swellData.tide_height ? `${swellData.tide_height} ft` : '— ft'}
+                    {session.swell_signature.tide_height || '—'}
                   </span>
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Board Used - clickable link to quiver */}
+          {session.board && (
+            <button
+              onClick={handleBoardClick}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-left w-full"
+            >
+              <SurfboardIcon className="h-4 w-4 text-primary flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-muted-foreground">Board</p>
+                <p className="font-semibold text-sm text-foreground truncate">
+                  {session.board.brand ? `${session.board.brand} ` : ''}{session.board.name}
+                </p>
+              </div>
+            </button>
           )}
 
           {/* User Session Stats - as tags */}
@@ -376,6 +375,13 @@ const SessionCard = ({ session, currentUserId, onLike, onKook, onCommentAdded, o
               </span>
             )}
           </div>
+
+          {/* Session Notes */}
+          {session.notes && (
+            <div className="pt-2">
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{session.notes}</p>
+            </div>
+          )}
 
           {/* Session Media */}
           {session.media && session.media.length > 0 && (

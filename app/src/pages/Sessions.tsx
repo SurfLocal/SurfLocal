@@ -5,7 +5,7 @@ import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Waves, ChevronRight, ChevronLeft, X, Image as ImageIcon, Flame } from 'lucide-react';
 import { format } from 'date-fns';
@@ -40,6 +40,14 @@ interface SessionData {
   kooks_count: number;
   is_kooked: boolean;
   board?: { id: string; name: string; brand: string | null; photo_url: string | null } | null;
+  swell_signature?: {
+    swell_height: string | null;
+    swell_period: number | null;
+    swell_direction: string | null;
+    wind_speed: number | null;
+    wind_direction: string | null;
+    tide_height: string | null;
+  } | null;
 }
 
 interface MediaItem {
@@ -77,6 +85,7 @@ const Sessions = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [stats, setStats] = useState<UserStats>({ totalHours: 0, totalWaves: 0, totalBarrels: 0, totalAirs: 0, topSpot: null });
   const [profile, setProfile] = useState<ProfileStats | null>(null);
+  const [calculatedLongestStreak, setCalculatedLongestStreak] = useState<number | null>(null);
   
   // Media gallery state
   const [recentMedia, setRecentMedia] = useState<MediaItem[]>([]);
@@ -98,12 +107,12 @@ const Sessions = () => {
   useEffect(() => {
     const fetchProfile = async () => {
       if (!user) return;
-      const { data } = await supabase
-        .from('profiles')
-        .select('display_name, avatar_url, total_shakas_received, total_kooks_received, longest_streak, longest_streak_start')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (data) setProfile(data);
+      try {
+        const data = await api.profiles.getByUserId(user.id);
+        if (data) setProfile(data);
+      } catch (error) {
+        console.error('Error fetching profile:', error);
+      }
     };
     if (user) fetchProfile();
   }, [user]);
@@ -112,84 +121,62 @@ const Sessions = () => {
     const fetchSessions = async () => {
       if (!user) return;
 
-      const { data } = await supabase
-        .from('sessions')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('session_date', { ascending: false });
+      try {
+        const data = await api.sessions.getByUser(user.id, 50, 0, user.id);
 
-      if (data) {
-        // Calculate stats
-        const totalMinutes = data.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
-        const totalHours = Math.ceil(totalMinutes / 60); // Round up
-        const totalWaves = data.reduce((sum, s) => sum + (s.wave_count || 0), 0);
-        const totalBarrels = data.reduce((sum, s) => sum + (s.barrel_count || 0), 0);
-        const totalAirs = data.reduce((sum, s) => sum + (s.air_count || 0), 0);
-        const locationCounts: Record<string, number> = {};
-        data.forEach(s => {
-          locationCounts[s.location] = (locationCounts[s.location] || 0) + 1;
-        });
-        const topSpot = Object.entries(locationCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
-        setStats({ totalHours, totalWaves, totalBarrels, totalAirs, topSpot });
+        if (data && data.length > 0) {
+          // Calculate stats
+          const totalMinutes = data.reduce((sum: number, s: any) => sum + (s.duration_minutes || 0), 0);
+          const totalHours = Math.ceil(totalMinutes / 60); // Round up
+          const totalWaves = data.reduce((sum: number, s: any) => sum + (s.wave_count || 0), 0);
+          const totalBarrels = data.reduce((sum: number, s: any) => sum + (s.barrel_count || 0), 0);
+          const totalAirs = data.reduce((sum: number, s: any) => sum + (s.air_count || 0), 0);
+          const locationCounts: Record<string, number> = {};
+          data.forEach((s: any) => {
+            locationCounts[s.location] = (locationCounts[s.location] || 0) + 1;
+          });
+          const topSpot = Object.entries(locationCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+          setStats({ totalHours, totalWaves, totalBarrels, totalAirs, topSpot });
 
-        // Enrich sessions with media and engagement data
-        const enrichedSessions = await Promise.all(data.map(async (session) => {
-          const [mediaRes, likesRes, commentsRes, myLikeRes, kooksRes, myKookRes, boardRes] = await Promise.all([
-            supabase.from('session_media').select('url, media_type').eq('session_id', session.id),
-            supabase.from('session_likes').select('id', { count: 'exact' }).eq('session_id', session.id),
-            supabase.from('session_comments').select('id', { count: 'exact' }).eq('session_id', session.id),
-            supabase.from('session_likes').select('id').eq('session_id', session.id).eq('user_id', user.id).maybeSingle(),
-            supabase.from('session_kooks').select('id', { count: 'exact' }).eq('session_id', session.id),
-            supabase.from('session_kooks').select('id').eq('session_id', session.id).eq('user_id', user.id).maybeSingle(),
-            session.board_id ? supabase.from('boards').select('id, name, brand, photo_url').eq('id', session.board_id).maybeSingle() : Promise.resolve({ data: null }),
-          ]);
-          return {
+          // Map sessions to expected format (backend includes like_count, comment_count, media, swell_signature)
+          const enrichedSessions = data.map((session: any) => ({
             ...session,
-            media: mediaRes.data || [],
-            likes_count: likesRes.count || 0,
-            comments_count: commentsRes.count || 0,
-            is_liked: !!myLikeRes.data,
-            kooks_count: kooksRes.count || 0,
-            is_kooked: !!myKookRes.data,
-            board: boardRes.data,
-          };
-        }));
+            media: session.media || [],
+            likes_count: session.like_count || 0,
+            comments_count: session.comment_count || 0,
+            is_liked: session.is_liked || false,
+            kooks_count: session.kooks_count || 0,
+            is_kooked: session.is_kooked || false,
+            board: session.board || null,
+            swell_signature: session.swell_signature || null,
+          }));
 
-        setSessions(enrichedSessions);
+          setSessions(enrichedSessions);
+        } else {
+          setSessions([]);
+        }
+      } catch (error) {
+        console.error('Error fetching sessions:', error);
+        toast({ title: 'Failed to load sessions', variant: 'destructive' });
       }
       setLoadingData(false);
     };
 
     if (user) fetchSessions();
-  }, [user]);
+  }, [user, toast]);
 
-  // Fetch recent media
+  // Fetch recent media from user's sessions
   useEffect(() => {
     const fetchRecentMedia = async () => {
       if (!user) return;
-
-      const { data: sessionIds } = await supabase
-        .from('sessions')
-        .select('id, location, session_date')
-        .eq('user_id', user.id);
-
-      if (!sessionIds || sessionIds.length === 0) return;
-
-      const { data: media } = await supabase
-        .from('session_media')
-        .select('id, url, media_type, session_id, created_at')
-        .in('session_id', sessionIds.map(s => s.id))
-        .order('created_at', { ascending: false })
-        .limit(4);
-
-      if (media) {
-        const sessionMap = new Map(sessionIds.map(s => [s.id, s]));
-        const enriched = media.map(m => ({
-          ...m,
-          session_location: sessionMap.get(m.session_id)?.location || '',
-          session_date: sessionMap.get(m.session_id)?.session_date || '',
-        }));
-        setRecentMedia(enriched);
+      try {
+        const media = await api.sessions.getUserMedia(user.id, 20, 0);
+        if (media) {
+          setRecentMedia(media);
+        }
+      } catch (error) {
+        console.error('Error fetching media:', error);
+        setRecentMedia([]);
       }
     };
 
@@ -199,38 +186,18 @@ const Sessions = () => {
   const fetchAllMedia = useCallback(async (page: number) => {
     if (!user) return;
     setLoadingMedia(true);
-
-    const { data: sessionIds } = await supabase
-      .from('sessions')
-      .select('id, location, session_date')
-      .eq('user_id', user.id);
-
-    if (!sessionIds || sessionIds.length === 0) {
-      setLoadingMedia(false);
-      return;
-    }
-
-    const { data: media, count } = await supabase
-      .from('session_media')
-      .select('id, url, media_type, session_id, created_at', { count: 'exact' })
-      .in('session_id', sessionIds.map(s => s.id))
-      .order('created_at', { ascending: false })
-      .range(page * MEDIA_PER_PAGE, (page + 1) * MEDIA_PER_PAGE - 1);
-
-    if (media) {
-      const sessionMap = new Map(sessionIds.map(s => [s.id, s]));
-      const enriched = media.map(m => ({
-        ...m,
-        session_location: sessionMap.get(m.session_id)?.location || '',
-        session_date: sessionMap.get(m.session_id)?.session_date || '',
-      }));
-      
-      if (page === 0) {
-        setAllMedia(enriched);
-      } else {
-        setAllMedia(prev => [...prev, ...enriched]);
+    try {
+      const media = await api.sessions.getUserMedia(user.id, MEDIA_PER_PAGE, page * MEDIA_PER_PAGE);
+      if (media) {
+        if (page === 0) {
+          setAllMedia(media);
+        } else {
+          setAllMedia(prev => [...prev, ...media]);
+        }
+        setHasMoreMedia(media.length === MEDIA_PER_PAGE);
       }
-      setHasMoreMedia(count ? (page + 1) * MEDIA_PER_PAGE < count : false);
+    } catch (error) {
+      console.error('Error fetching all media:', error);
     }
     setLoadingMedia(false);
   }, [user]);
@@ -253,46 +220,61 @@ const Sessions = () => {
   };
 
   const goToPrevious = () => {
-    setLightboxIndex(prev => (prev > 0 ? prev - 1 : allMedia.length - 1));
+    const mediaSource = allMedia.length > 0 ? allMedia : recentMedia;
+    setLightboxIndex(prev => (prev > 0 ? prev - 1 : mediaSource.length - 1));
   };
 
   const goToNext = () => {
-    setLightboxIndex(prev => (prev < allMedia.length - 1 ? prev + 1 : 0));
+    const mediaSource = allMedia.length > 0 ? allMedia : recentMedia;
+    setLightboxIndex(prev => (prev < mediaSource.length - 1 ? prev + 1 : 0));
   };
 
   const handleLike = async (sessionId: string, isLiked: boolean) => {
     if (!user) return;
-    // Own sessions - can't like them, the button is disabled but just in case
-    if (isLiked) {
-      await supabase.from('session_likes').delete().eq('session_id', sessionId).eq('user_id', user.id);
-    } else {
-      await supabase.from('session_likes').insert({ session_id: sessionId, user_id: user.id });
+    try {
+      if (isLiked) {
+        await api.social.unlikeSession(sessionId, user.id);
+      } else {
+        await api.social.likeSession(sessionId, user.id);
+      }
+      setSessions(sessions.map(s => s.id === sessionId ? { ...s, is_liked: !isLiked, likes_count: isLiked ? s.likes_count - 1 : s.likes_count + 1 } : s));
+    } catch (error) {
+      console.error('Error toggling like:', error);
+      toast({ title: 'Failed to update like', variant: 'destructive' });
     }
-    setSessions(sessions.map(s => s.id === sessionId ? { ...s, is_liked: !isLiked, likes_count: isLiked ? s.likes_count - 1 : s.likes_count + 1 } : s));
   };
 
   const handleKook = async (sessionId: string, isKooked: boolean) => {
     if (!user) return;
-    // Own sessions - can't kook them, the button is disabled but just in case
-    if (isKooked) {
-      await supabase.from('session_kooks').delete().eq('session_id', sessionId).eq('user_id', user.id);
-    } else {
-      await supabase.from('session_kooks').insert({ session_id: sessionId, user_id: user.id });
+    try {
+      if (isKooked) {
+        await api.social.unkookSession(sessionId, user.id);
+      } else {
+        await api.social.kookSession(sessionId, user.id);
+      }
+      setSessions(sessions.map(s => s.id === sessionId ? { ...s, is_kooked: !isKooked, kooks_count: isKooked ? s.kooks_count - 1 : s.kooks_count + 1 } : s));
+    } catch (error) {
+      console.error('Error toggling kook:', error);
+      toast({ title: 'Failed to update kook', variant: 'destructive' });
     }
-    setSessions(sessions.map(s => s.id === sessionId ? { ...s, is_kooked: !isKooked, kooks_count: isKooked ? s.kooks_count - 1 : s.kooks_count + 1 } : s));
   };
 
   const handleCommentAdded = (sessionId: string) => {
     setSessions(sessions.map(s => s.id === sessionId ? { ...s, comments_count: s.comments_count + 1 } : s));
   };
 
+  const handleCommentDeleted = (sessionId: string) => {
+    setSessions(sessions.map(s => s.id === sessionId ? { ...s, comments_count: Math.max(0, s.comments_count - 1) } : s));
+  };
+
   const handleDeleteSession = async (sessionId: string) => {
     if (!user) return;
-    const { error } = await supabase.from('sessions').delete().eq('id', sessionId).eq('user_id', user.id);
-    if (!error) {
+    try {
+      await api.sessions.delete(sessionId);
       setSessions(sessions.filter(s => s.id !== sessionId));
       toast({ title: 'Session deleted' });
-    } else {
+    } catch (error) {
+      console.error('Error deleting session:', error);
       toast({ title: 'Failed to delete session', variant: 'destructive' });
     }
   };
@@ -343,14 +325,14 @@ const Sessions = () => {
           </div>
           {/* Longest Streak */}
           <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-4 py-3 col-span-2 sm:col-span-1">
-            <div className={`p-1 rounded-full ${(profile?.longest_streak || 0) >= 2 ? 'bg-orange-500/20' : 'bg-muted'}`}>
-              <Flame className={`h-5 w-5 ${(profile?.longest_streak || 0) >= 2 ? 'text-orange-500' : 'text-muted-foreground/40'}`} />
+            <div className={`p-1 rounded-full ${(calculatedLongestStreak ?? profile?.longest_streak ?? 0) >= 2 ? 'bg-orange-500/20' : 'bg-muted'}`}>
+              <Flame className={`h-5 w-5 ${(calculatedLongestStreak ?? profile?.longest_streak ?? 0) >= 2 ? 'text-orange-500' : 'text-muted-foreground/40'}`} />
             </div>
             <div>
-              <p className="text-lg font-bold text-foreground">{profile?.longest_streak || 0}</p>
+              <p className="text-lg font-bold text-foreground">{calculatedLongestStreak ?? profile?.longest_streak ?? 0}</p>
               <p className="text-xs text-muted-foreground">
                 Best Streak
-                {profile?.longest_streak_start && (
+                {profile?.longest_streak_start && (calculatedLongestStreak ?? profile?.longest_streak ?? 0) === profile.longest_streak && (
                   <span className="block text-[10px] text-muted-foreground/70">
                     {format(new Date(profile.longest_streak_start), 'MMM d, yyyy')}
                   </span>
@@ -399,6 +381,9 @@ const Sessions = () => {
                 longest_streak: longestStreak, 
                 longest_streak_start: longestStreakStart 
               } : prev);
+            }}
+            onStreakCalculated={(currentStreak, longestStreak) => {
+              setCalculatedLongestStreak(longestStreak);
             }}
           />
         </div>
@@ -466,6 +451,7 @@ const Sessions = () => {
                 onLike={handleLike}
                 onKook={handleKook}
                 onCommentAdded={handleCommentAdded}
+                onCommentDeleted={handleCommentDeleted}
                 onDelete={handleDeleteSession}
               />
             ))}

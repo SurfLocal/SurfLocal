@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { Plus, Waves, Calendar, MapPin, Users, BookOpen, Compass } from 'lucide-react';
 import { format } from 'date-fns';
 import SurfboardIcon from '@/components/icons/SurfboardIcon';
@@ -38,22 +38,17 @@ const Dashboard = () => {
     const fetchData = async () => {
       if (!user) return;
 
-      const [sessionsRes, profileRes] = await Promise.all([
-        supabase
-          .from('sessions')
-          .select('id, location, session_date, wave_count, rating')
-          .eq('user_id', user.id)
-          .order('session_date', { ascending: false })
-          .limit(5),
-        supabase
-          .from('profiles')
-          .select('display_name')
-          .eq('user_id', user.id)
-          .maybeSingle()
-      ]);
+      try {
+        const [sessionsData, profileData] = await Promise.all([
+          api.sessions.getByUser(user.id, 5, 0),
+          api.profiles.getByUserId(user.id)
+        ]);
 
-      if (sessionsRes.data) setSessions(sessionsRes.data);
-      if (profileRes.data) setProfile(profileRes.data);
+        if (sessionsData) setSessions(sessionsData.slice(0, 5));
+        if (profileData) setProfile(profileData);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      }
       setLoadingData(false);
     };
 

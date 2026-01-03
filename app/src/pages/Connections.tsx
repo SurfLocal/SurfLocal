@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { Waves, ChevronLeft, UserPlus, UserMinus } from 'lucide-react';
 
 interface UserConnection {
@@ -34,53 +34,23 @@ const Connections = () => {
     const fetchConnections = async () => {
       if (!userId || !user) return;
 
-      // Get profile name
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('display_name')
-        .eq('user_id', userId)
-        .maybeSingle();
-      
-      setProfileName(profile?.display_name || 'Surfer');
+      try {
+        // Get profile name
+        const profile = await api.profiles.getByUserId(userId);
+        setProfileName(profile?.display_name || 'Surfer');
 
-      // Get who the current user follows
-      const { data: myFollowsData } = await supabase
-        .from('follows')
-        .select('following_id')
-        .eq('follower_id', user.id);
-      
-      setMyFollowing(new Set(myFollowsData?.map(f => f.following_id) || []));
-
-      // Get followers
-      const { data: followersData } = await supabase
-        .from('follows')
-        .select('follower_id')
-        .eq('following_id', userId);
-
-      if (followersData && followersData.length > 0) {
-        const followerIds = followersData.map(f => f.follower_id);
-        const { data: followerProfiles } = await supabase
-          .from('profiles')
-          .select('user_id, display_name, avatar_url, home_break')
-          .in('user_id', followerIds);
+        // Get followers and following separately
+        const [followersData, followingData, myFollowingData] = await Promise.all([
+          api.social.getFollowers(userId),
+          api.social.getFollowing(userId),
+          api.social.getFollowing(user.id)
+        ]);
         
-        setFollowers(followerProfiles || []);
-      }
-
-      // Get following
-      const { data: followingData } = await supabase
-        .from('follows')
-        .select('following_id')
-        .eq('follower_id', userId);
-
-      if (followingData && followingData.length > 0) {
-        const followingIds = followingData.map(f => f.following_id);
-        const { data: followingProfiles } = await supabase
-          .from('profiles')
-          .select('user_id, display_name, avatar_url, home_break')
-          .in('user_id', followingIds);
-        
-        setFollowing(followingProfiles || []);
+        setFollowers(followersData || []);
+        setFollowing(followingData || []);
+        setMyFollowing(new Set((myFollowingData || []).map((f: any) => f.user_id)));
+      } catch (error) {
+        console.error('Error fetching connections:', error);
       }
 
       setLoadingData(false);
@@ -91,18 +61,26 @@ const Connections = () => {
 
   const handleFollow = async (targetUserId: string) => {
     if (!user) return;
-    await supabase.from('follows').insert({ follower_id: user.id, following_id: targetUserId });
-    setMyFollowing(prev => new Set([...prev, targetUserId]));
+    try {
+      await api.social.follow(user.id, targetUserId);
+      setMyFollowing(prev => new Set([...prev, targetUserId]));
+    } catch (error) {
+      console.error('Error following:', error);
+    }
   };
 
   const handleUnfollow = async (targetUserId: string) => {
     if (!user) return;
-    await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', targetUserId);
-    setMyFollowing(prev => {
-      const next = new Set(prev);
-      next.delete(targetUserId);
-      return next;
-    });
+    try {
+      await api.social.unfollow(user.id, targetUserId);
+      setMyFollowing(prev => {
+        const next = new Set(prev);
+        next.delete(targetUserId);
+        return next;
+      });
+    } catch (error) {
+      console.error('Error unfollowing:', error);
+    }
   };
 
   if (loading || !user || loadingData) {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/lib/api';
 
 export const useAdmin = () => {
   const { user } = useAuth();
@@ -16,21 +16,15 @@ export const useAdmin = () => {
       }
 
       try {
-        const { data, error } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .eq('role', 'admin')
-          .maybeSingle();
-
-        if (error) {
-          console.error('Error checking admin status:', error);
-          setIsAdmin(false);
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/auth/check-admin/${user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setIsAdmin(data.isAdmin || false);
         } else {
-          setIsAdmin(!!data);
+          setIsAdmin(false);
         }
-      } catch (err) {
-        console.error('Error checking admin status:', err);
+      } catch (error) {
+        console.error('Failed to check admin status:', error);
         setIsAdmin(false);
       } finally {
         setLoading(false);

@@ -7,11 +7,11 @@ import InfoPanel, { SurfPrediction } from '@/components/InfoPanel';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Waves, Compass, Trash2, X } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
-const MAPBOX_TOKEN = 'pk.eyJ1Ijoicm9icm9uYXluZSIsImEiOiJjbWpwYWI0dWYyODJmM2RweTN1MjBjN3pqIn0.72-EvJIHzZaucikkpia5rg';
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 'pk.eyJ1Ijoicm9icm9uYXluZSIsImEiOiJjbWpwYWI0dWYyODJmM2RweTN1MjBjN3pqIn0.72-EvJIHzZaucikkpia5rg';
 
 interface SavedLocation {
   id: string;
@@ -42,59 +42,56 @@ const Maps = () => {
 
   useEffect(() => { if (!loading && !user) navigate('/auth'); }, [user, loading, navigate]);
 
-  // Fetch saved locations
+  // Fetch saved locations (favorite spots)
   useEffect(() => {
     const fetchSavedLocations = async () => {
       if (!user) return;
-      
-      const { data } = await supabase
-        .from('saved_locations')
-        .select('id, name, latitude, longitude')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-      
-      if (data) {
-        setSavedLocations(data.map(loc => ({
-          id: loc.id,
-          name: loc.name,
-          latitude: Number(loc.latitude),
-          longitude: Number(loc.longitude),
-        })));
+      try {
+        const locations = await api.locations.getByUser(user.id);
+        if (locations && locations.length > 0) {
+          setSavedLocations(locations.map((loc: any) => ({
+            id: loc.id,
+            name: loc.name,
+            latitude: Number(loc.latitude),
+            longitude: Number(loc.longitude),
+          })));
+        }
+      } catch (error) {
+        console.error('Error fetching saved locations:', error);
+        setSavedLocations([]);
       }
     };
     
     if (user) fetchSavedLocations();
   }, [user]);
 
-  // Fetch session locations for history pins (using spots table for coordinates)
+  // Fetch session locations for history pins
   useEffect(() => {
     const fetchSessionLocations = async () => {
       if (!user) return;
       
-      // Get user's sessions with their locations
-      const { data: sessionsData } = await supabase
-        .from('sessions')
-        .select('location')
-        .eq('user_id', user.id);
-      
-      if (!sessionsData || sessionsData.length === 0) return;
-      
-      // Get unique location names
-      const uniqueLocationNames = [...new Set(sessionsData.map(s => s.location))];
-      
-      // Fetch coordinates from spots table
-      const { data: spotsData } = await supabase
-        .from('spots')
-        .select('name, latitude, longitude')
-        .in('name', uniqueLocationNames);
-      
-      if (spotsData) {
-        const locations: SessionLocation[] = spotsData.map(spot => ({
-          latitude: Number(spot.latitude),
-          longitude: Number(spot.longitude),
-          location: spot.name,
-        }));
-        setSessionLocations(locations);
+      try {
+        // Get user's sessions
+        const sessionsData = await api.sessions.getByUser(user.id);
+        if (!sessionsData || sessionsData.length === 0) return;
+        
+        // Get unique location names
+        const uniqueLocationNames = [...new Set(sessionsData.map((s: any) => s.location))];
+        
+        // Fetch coordinates from spots
+        const spotsData = await api.spots.getAll();
+        if (spotsData) {
+          const locations: SessionLocation[] = spotsData
+            .filter((spot: any) => uniqueLocationNames.includes(spot.name))
+            .map((spot: any) => ({
+              latitude: Number(spot.latitude),
+              longitude: Number(spot.longitude),
+              location: spot.name,
+            }));
+          setSessionLocations(locations);
+        }
+      } catch (error) {
+        console.error('Error fetching session locations:', error);
       }
     };
     
@@ -116,54 +113,44 @@ const Maps = () => {
 
   const handleSaveLocation = async (name: string, lat: number, lng: number) => {
     if (!user) return;
-    
-    const { data, error } = await supabase
-      .from('saved_locations')
-      .insert({
+    try {
+      // Save to saved_locations table (not favorite_spots)
+      await api.locations.save({
         user_id: user.id,
         name,
         latitude: lat,
         longitude: lng,
-      })
-      .select()
-      .single();
-    
-    if (error) {
+      });
+      
+      // Refresh saved locations list to show new pin on map
+      const locations = await api.locations.getByUser(user.id);
+      if (locations) {
+        setSavedLocations(locations.map((loc: any) => ({
+          id: loc.id,
+          name: loc.name,
+          latitude: Number(loc.latitude),
+          longitude: Number(loc.longitude),
+        })));
+      }
+      
+      toast({ title: 'Location saved!', description: `${name} saved to your locations` });
+    } catch (error) {
+      console.error('Error saving location:', error);
       toast({ title: 'Failed to save location', variant: 'destructive' });
-      return;
-    }
-    
-    if (data) {
-      const newLoc = {
-        id: data.id,
-        name: data.name,
-        latitude: Number(data.latitude),
-        longitude: Number(data.longitude),
-      };
-      setSavedLocations(prev => [newLoc, ...prev]);
-      setSelectedSavedLocation(newLoc);
-      toast({ title: 'Location saved!' });
     }
   };
 
   const handleDeleteLocation = async () => {
-    if (!deletingLocation) return;
-    
-    const { error } = await supabase
-      .from('saved_locations')
-      .delete()
-      .eq('id', deletingLocation.id);
-    
-    if (error) {
-      toast({ title: 'Failed to delete location', variant: 'destructive' });
-    } else {
+    if (!deletingLocation || !user) return;
+    try {
+      await api.locations.delete(deletingLocation.id);
       setSavedLocations(prev => prev.filter(loc => loc.id !== deletingLocation.id));
-      if (selectedSavedLocation?.id === deletingLocation.id) {
-        setSelectedSavedLocation(null);
-      }
-      toast({ title: 'Location deleted' });
+      setSelectedSavedLocation(null);
+      toast({ title: 'Location removed' });
+    } catch (error) {
+      console.error('Error deleting location:', error);
+      toast({ title: 'Failed to delete location', variant: 'destructive' });
     }
-    
     setShowDeleteDialog(false);
     setDeletingLocation(null);
   };
@@ -177,12 +164,19 @@ const Maps = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ latitude: lat, longitude: lng }),
       });
-      if (response.ok) { const data = await response.json(); setPrediction(data); }
+      if (response.ok) { 
+        const data = await response.json();
+        // Ensure GPS coordinates are always included
+        if (!data.gps) {
+          data.gps = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        }
+        setPrediction(data);
+      }
       else { throw new Error('API error'); }
     } catch {
       // Mock data fallback
       setPrediction({
-        gps: `${lat.toFixed(4)},${lng.toFixed(4)}`,
+        gps: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
         swell_direction: { predictions: [{ value: 'W', confidence: 0.89 }], top_prediction: 'W', top_confidence: 0.89 },
         wind_direction: { predictions: [{ value: 'NW', confidence: 0.75 }], top_prediction: 'NW', top_confidence: 0.75 },
         tide: { predictions: [{ value: 'Mid', confidence: 0.82 }], top_prediction: 'Mid', top_confidence: 0.82 },

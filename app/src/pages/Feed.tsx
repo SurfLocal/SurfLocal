@@ -5,9 +5,9 @@ import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-import { Waves, UserPlus } from 'lucide-react';
+import { Waves, UserPlus, Users } from 'lucide-react';
 import SessionCard from '@/components/SessionCard';
 
 interface FeedSession {
@@ -35,6 +35,14 @@ interface FeedSession {
   kooks_count: number;
   is_kooked: boolean;
   media: { url: string; media_type: string }[];
+  swell_signature?: {
+    swell_height: string | null;
+    swell_period: number | null;
+    swell_direction: string | null;
+    wind_speed: number | null;
+    wind_direction: string | null;
+    tide_height: string | null;
+  } | null;
 }
 
 interface SuggestedUser {
@@ -50,6 +58,8 @@ const Feed = () => {
   const [sessions, setSessions] = useState<FeedSession[]>([]);
   const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
 
   useEffect(() => { if (!loading && !user) navigate('/auth'); }, [user, loading, navigate]);
 
@@ -57,63 +67,53 @@ const Feed = () => {
     const fetchFeed = async () => {
       if (!user) return;
 
-      const { data: following } = await supabase.from('follows').select('following_id').eq('follower_id', user.id);
-      const followingIds = following?.map(f => f.following_id) || [];
-
-      const { data: sessionsData } = await supabase
-        .from('sessions')
-        .select('id, location, session_date, wave_height, wave_count, duration_minutes, shape, power, crowd, rating, gear, air_count, barrel_count, notes, user_id, is_public, board_id, created_at')
-        .order('session_date', { ascending: false })
-        .limit(50);
-
-      if (sessionsData && sessionsData.length > 0) {
-        const filteredSessions = sessionsData.filter(session => 
-          session.user_id === user.id || 
-          (session.is_public && followingIds.includes(session.user_id))
-        );
-
-        const enrichedSessions = await Promise.all(filteredSessions.map(async (session) => {
-          const [profileRes, likesRes, commentsRes, mediaRes, myLikeRes, boardRes, kooksRes, myKookRes] = await Promise.all([
-            supabase.from('profiles').select('display_name, user_id, avatar_url').eq('user_id', session.user_id).maybeSingle(),
-            supabase.from('session_likes').select('id', { count: 'exact' }).eq('session_id', session.id),
-            supabase.from('session_comments').select('id', { count: 'exact' }).eq('session_id', session.id),
-            supabase.from('session_media').select('url, media_type').eq('session_id', session.id),
-            supabase.from('session_likes').select('id').eq('session_id', session.id).eq('user_id', user.id).maybeSingle(),
-            session.board_id ? supabase.from('boards').select('id, name, brand, photo_url').eq('id', session.board_id).maybeSingle() : Promise.resolve({ data: null }),
-            supabase.from('session_kooks').select('id', { count: 'exact' }).eq('session_id', session.id),
-            supabase.from('session_kooks').select('id').eq('session_id', session.id).eq('user_id', user.id).maybeSingle(),
-          ]);
-          return {
-            ...session,
-            profile: profileRes.data,
-            board: boardRes.data,
-            likes_count: likesRes.count || 0,
-            comments_count: commentsRes.count || 0,
-            is_liked: !!myLikeRes.data,
-            kooks_count: kooksRes.count || 0,
-            is_kooked: !!myKookRes.data,
-            media: mediaRes.data || [],
-          };
+      try {
+        // Fetch feed sessions - only from users we follow
+        const sessionsData = await api.sessions.getFeed(50, 0, user.id);
+        
+        // Backend already includes all joined data and counts
+        // Map to match expected format
+        const mappedSessions = sessionsData.map((session: any) => ({
+          ...session,
+          profile: {
+            display_name: session.display_name,
+            user_id: session.user_id,
+            avatar_url: session.avatar_url,
+          },
+          likes_count: session.like_count || 0,
+          comments_count: session.comment_count || 0,
+          is_liked: session.is_liked || false,
+          kooks_count: session.kooks_count || 0,
+          is_kooked: session.is_kooked || false,
+          media: session.media || [],
+          board: session.board || null,
+          swell_signature: session.swell_signature || null,
         }));
-        setSessions(enrichedSessions.slice(0, 20));
-      } else {
-        setSessions([]);
-      }
+        
+        setSessions(mappedSessions.slice(0, 20));
 
-      const { data: allProfiles } = await supabase.from('profiles').select('user_id, display_name').neq('user_id', user.id).limit(10);
-      if (allProfiles) {
-        const suggested = allProfiles.map(p => ({
-          ...p,
-          is_following: followingIds.includes(p.user_id),
-        }));
-        setSuggestedUsers(suggested.filter(u => !u.is_following).slice(0, 5));
+        // Get following list for suggested users
+        const following = await api.social.getFollowing(user.id);
+        const followingIds = following.map((f: any) => f.user_id);
+
+        // Get follow stats
+        const followStats = await api.social.getFollowStats(user.id, user.id);
+        setFollowersCount(followStats.followers_count || 0);
+        setFollowingCount(followStats.following_count || 0);
+
+        // TODO: Add endpoint to get suggested users
+        // For now, set empty array
+        setSuggestedUsers([]);
+      } catch (error) {
+        console.error('Error fetching feed:', error);
+        toast({ title: 'Failed to load feed', variant: 'destructive' });
       }
 
       setLoadingData(false);
     };
 
     if (user) fetchFeed();
-  }, [user]);
+  }, [user, toast]);
 
   const handleLike = async (sessionId: string, isLiked: boolean) => {
     if (!user) return;
@@ -122,36 +122,17 @@ const Feed = () => {
     // Can't like own session
     if (session.user_id === user.id) return;
     
-    if (isLiked) {
-      await supabase.from('session_likes').delete().eq('session_id', sessionId).eq('user_id', user.id);
-      // Decrement total_shakas_received for session owner
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('total_shakas_received')
-        .eq('user_id', session.user_id)
-        .maybeSingle();
-      if (profileData) {
-        await supabase
-          .from('profiles')
-          .update({ total_shakas_received: Math.max(0, (profileData.total_shakas_received || 0) - 1) })
-          .eq('user_id', session.user_id);
+    try {
+      if (isLiked) {
+        await api.social.unlikeSession(sessionId, user.id);
+      } else {
+        await api.social.likeSession(sessionId, user.id);
       }
-    } else {
-      await supabase.from('session_likes').insert({ session_id: sessionId, user_id: user.id });
-      // Increment total_shakas_received for session owner
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('total_shakas_received')
-        .eq('user_id', session.user_id)
-        .maybeSingle();
-      if (profileData) {
-        await supabase
-          .from('profiles')
-          .update({ total_shakas_received: (profileData.total_shakas_received || 0) + 1 })
-          .eq('user_id', session.user_id);
-      }
+      setSessions(sessions.map(s => s.id === sessionId ? { ...s, is_liked: !isLiked, likes_count: isLiked ? s.likes_count - 1 : s.likes_count + 1 } : s));
+    } catch (error) {
+      console.error('Error toggling like:', error);
+      toast({ title: 'Failed to update like', variant: 'destructive' });
     }
-    setSessions(sessions.map(s => s.id === sessionId ? { ...s, is_liked: !isLiked, likes_count: isLiked ? s.likes_count - 1 : s.likes_count + 1 } : s));
   };
 
   const handleKook = async (sessionId: string, isKooked: boolean) => {
@@ -161,58 +142,49 @@ const Feed = () => {
     // Can't kook own session
     if (session.user_id === user.id) return;
     
-    if (isKooked) {
-      await supabase.from('session_kooks').delete().eq('session_id', sessionId).eq('user_id', user.id);
-      // Decrement total_kooks_received for session owner
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('total_kooks_received')
-        .eq('user_id', session.user_id)
-        .maybeSingle();
-      if (profileData) {
-        await supabase
-          .from('profiles')
-          .update({ total_kooks_received: Math.max(0, (profileData.total_kooks_received || 0) - 1) })
-          .eq('user_id', session.user_id);
+    try {
+      if (isKooked) {
+        await api.social.unkookSession(sessionId, user.id);
+      } else {
+        await api.social.kookSession(sessionId, user.id);
       }
-    } else {
-      await supabase.from('session_kooks').insert({ session_id: sessionId, user_id: user.id });
-      // Increment total_kooks_received for session owner
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('total_kooks_received')
-        .eq('user_id', session.user_id)
-        .maybeSingle();
-      if (profileData) {
-        await supabase
-          .from('profiles')
-          .update({ total_kooks_received: (profileData.total_kooks_received || 0) + 1 })
-          .eq('user_id', session.user_id);
-      }
+      setSessions(sessions.map(s => s.id === sessionId ? { ...s, is_kooked: !isKooked, kooks_count: isKooked ? s.kooks_count - 1 : s.kooks_count + 1 } : s));
+    } catch (error) {
+      console.error('Error toggling kook:', error);
+      toast({ title: 'Failed to update kook', variant: 'destructive' });
     }
-    setSessions(sessions.map(s => s.id === sessionId ? { ...s, is_kooked: !isKooked, kooks_count: isKooked ? s.kooks_count - 1 : s.kooks_count + 1 } : s));
   };
 
   const handleCommentAdded = (sessionId: string) => {
     setSessions(sessions.map(s => s.id === sessionId ? { ...s, comments_count: s.comments_count + 1 } : s));
   };
 
+  const handleCommentDeleted = (sessionId: string) => {
+    setSessions(sessions.map(s => s.id === sessionId ? { ...s, comments_count: Math.max(0, s.comments_count - 1) } : s));
+  };
+
   const handleDeleteSession = async (sessionId: string) => {
     if (!user) return;
-    const { error } = await supabase.from('sessions').delete().eq('id', sessionId).eq('user_id', user.id);
-    if (!error) {
+    try {
+      await api.sessions.delete(sessionId);
       setSessions(sessions.filter(s => s.id !== sessionId));
       toast({ title: 'Session deleted' });
-    } else {
+    } catch (error) {
+      console.error('Error deleting session:', error);
       toast({ title: 'Failed to delete session', variant: 'destructive' });
     }
   };
 
   const handleFollow = async (userId: string) => {
     if (!user) return;
-    await supabase.from('follows').insert({ follower_id: user.id, following_id: userId });
-    setSuggestedUsers(suggestedUsers.filter(u => u.user_id !== userId));
-    toast({ title: 'Following!' });
+    try {
+      await api.social.follow(user.id, userId);
+      setSuggestedUsers(suggestedUsers.filter(u => u.user_id !== userId));
+      toast({ title: 'Following!' });
+    } catch (error) {
+      console.error('Error following user:', error);
+      toast({ title: 'Failed to follow user', variant: 'destructive' });
+    }
   };
 
   if (loading || !user) return <Layout><div className="flex items-center justify-center min-h-[60vh]"><Waves className="h-8 w-8 animate-pulse text-primary" /></div></Layout>;
@@ -223,6 +195,21 @@ const Feed = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground">Welcome back!</h1>
           <p className="text-muted-foreground mt-1">See what your friends have been surfing</p>
+          
+          {/* Followers/Following Buttons */}
+          <div className="flex gap-2 mt-4">
+            <Button variant="outline" size="sm" asChild>
+              <Link to={`/connections/${user?.id}`}>
+                <Users className="h-4 w-4 mr-2" />
+                {followersCount} Followers
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link to={`/connections/${user?.id}`}>
+                {followingCount} Following
+              </Link>
+            </Button>
+          </div>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-8">
@@ -250,6 +237,7 @@ const Feed = () => {
                   onLike={handleLike}
                   onKook={handleKook}
                   onCommentAdded={handleCommentAdded}
+                  onCommentDeleted={handleCommentDeleted}
                   onDelete={handleDeleteSession}
                 />
               ))

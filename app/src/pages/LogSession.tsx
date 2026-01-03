@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Waves, Upload, X, Video, MapPin, User, Mountain } from 'lucide-react';
 import { getHours } from 'date-fns';
@@ -62,10 +62,17 @@ const LogSession = () => {
   const [selectedSpot, setSelectedSpot] = useState<Spot | null>(null);
   
   const [formData, setFormData] = useState(() => {
+    // Default to 1 hour ago, rounded to nearest hour (using local time, not UTC)
     const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const hours = now.getHours().toString().padStart(2, '0');
-    const minutes = now.getMinutes().toString().padStart(2, '0');
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const roundedHour = Math.round(oneHourAgo.getHours());
+    // Use local date components instead of toISOString() which returns UTC
+    const year = oneHourAgo.getFullYear();
+    const month = (oneHourAgo.getMonth() + 1).toString().padStart(2, '0');
+    const day = oneHourAgo.getDate().toString().padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    const hours = roundedHour.toString().padStart(2, '0');
+    const minutes = '00';
     return {
       session_date: dateStr,
       session_time: `${hours}:${minutes}`,
@@ -92,13 +99,17 @@ const LogSession = () => {
     const fetchData = async () => {
       if (!user) return;
       
-      const [boardsRes, spotsRes] = await Promise.all([
-        supabase.from('boards').select('id, name, brand').eq('user_id', user.id),
-        supabase.from('spots').select('id, name, location'),
-      ]);
-      
-      if (boardsRes.data) setBoards(boardsRes.data);
-      if (spotsRes.data) setSpots(spotsRes.data);
+      try {
+        const [boardsData, spotsData] = await Promise.all([
+          api.boards.getByUser(user.id),
+          api.spots.getAll(),
+        ]);
+        
+        if (boardsData) setBoards(boardsData);
+        if (spotsData) setSpots(spotsData);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      }
     };
     if (user) fetchData();
   }, [user]);
@@ -235,7 +246,7 @@ const LogSession = () => {
       const durationMinutes = (parseInt(formData.duration_hours) || 0) * 60 + (parseInt(formData.duration_minutes) || 0);
       
       // Create session with spot name as location
-      const { data: session, error: sessionError } = await supabase.from('sessions').insert({
+      const session = await api.sessions.create({
         user_id: user.id,
         location: selectedSpot.name,
         session_date: sessionDateTime.toISOString(),
@@ -247,57 +258,25 @@ const LogSession = () => {
         barrel_count: formData.barrel_count ? parseInt(formData.barrel_count) : null,
         notes: formData.notes || null,
         is_public: formData.is_public,
-        // Spot metrics
         shape: formData.shape,
         wave_height: formData.wave_height,
         power: formData.power,
         crowd: formData.crowd,
         rating: formData.rating,
-      }).select().single();
-
-      if (sessionError || !session) throw sessionError;
-
-      // Save swell signature data based on session time window
-      // For now, we insert empty/placeholder data formatted correctly
-      // The time window determines which period's data would be used (morning/midday/afternoon)
-      const timeWindow = getSessionTimeWindow(sessionDateTime);
-      
-      await supabase.from('session_swell_data').insert({
-        session_id: session.id,
-        // Placeholder values - these would come from live spot data in the future
-        // Format matches the Live Spot Data section from reports
-        swell_height: null,      // Would be e.g. 3.0 for "3ft"
-        swell_direction: null,   // Would be e.g. "WNW"
-        wind_speed: null,        // Would be e.g. 12 for "12 kts"
-        wind_direction: null,    // Would be e.g. "E"
-        tide_height: null,       // Would be e.g. 4.2 for "4.2 ft"
       });
 
-      // Upload media files
-      if (mediaFiles.length > 0) {
-        for (const file of mediaFiles) {
-          const fileExt = file.name.split('.').pop();
-          const fileName = `${user.id}/${session.id}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
-          
-          const { error: uploadError } = await supabase.storage
-            .from('session-media')
-            .upload(fileName, file, {
-              cacheControl: '3600',
-              upsert: false
-            });
+      if (!session) throw new Error('Failed to create session');
 
-          if (uploadError) {
-            toast({ title: `Failed to upload ${file.name}`, description: uploadError.message, variant: 'destructive' });
-          } else {
-            const { data: { publicUrl } } = supabase.storage.from('session-media').getPublicUrl(fileName);
-            
-            await supabase.from('session_media').insert({
-              session_id: session.id,
-              user_id: user.id,
-              url: publicUrl,
-              media_type: file.type,
-            });
-          }
+      // TODO: Save swell signature data - needs backend endpoint
+      // const timeWindow = getSessionTimeWindow(sessionDateTime);
+
+      // Upload media files to MinIO
+      if (mediaFiles.length > 0) {
+        try {
+          await api.upload.sessionMedia(mediaFiles, session.id, user.id);
+        } catch (uploadError) {
+          console.error('Error uploading media:', uploadError);
+          toast({ title: 'Session saved but media upload failed', variant: 'destructive' });
         }
       }
 
@@ -307,6 +286,7 @@ const LogSession = () => {
       toast({ title: 'Session logged!' });
       navigate('/feed');
     } catch (error) {
+      console.error('Error logging session:', error);
       toast({ title: 'Error logging session', variant: 'destructive' });
     } finally {
       setSubmitting(false);
@@ -500,7 +480,7 @@ const LogSession = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="wave_count">Waves Caught</Label>
-                  <Input id="wave_count" type="number" value={formData.wave_count} onChange={(e) => setFormData({ ...formData, wave_count: e.target.value })} placeholder="0" />
+                  <Input id="wave_count" type="number" min="0" value={formData.wave_count} onChange={(e) => setFormData({ ...formData, wave_count: e.target.value })} placeholder="0" />
                 </div>
 
                 <div className="space-y-2">
@@ -517,12 +497,12 @@ const LogSession = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="air_count">Air Count</Label>
-                  <Input id="air_count" type="number" value={formData.air_count} onChange={(e) => setFormData({ ...formData, air_count: e.target.value })} placeholder="0" />
+                  <Input id="air_count" type="number" min="0" value={formData.air_count} onChange={(e) => setFormData({ ...formData, air_count: e.target.value })} placeholder="0" />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="barrel_count">Barrel Count</Label>
-                  <Input id="barrel_count" type="number" value={formData.barrel_count} onChange={(e) => setFormData({ ...formData, barrel_count: e.target.value })} placeholder="0" />
+                  <Input id="barrel_count" type="number" min="0" value={formData.barrel_count} onChange={(e) => setFormData({ ...formData, barrel_count: e.target.value })} placeholder="0" />
                 </div>
               </div>
 

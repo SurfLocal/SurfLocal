@@ -6,14 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Search, UserPlus, UserMinus, Waves, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface SearchResult {
   user_id: string;
   display_name: string | null;
-  bio: string | null;
+  home_break: string | null;
   avatar_url: string | null;
   is_following: boolean;
 }
@@ -60,8 +60,12 @@ const FindFriends = () => {
   useEffect(() => {
     const fetchFollowing = async () => {
       if (!user) return;
-      const { data } = await supabase.from('follows').select('following_id').eq('follower_id', user.id);
-      if (data) setFollowing(new Set(data.map(f => f.following_id)));
+      try {
+        const data = await api.social.getFollowing(user.id);
+        if (data) setFollowing(new Set(data.map((f: any) => f.user_id)));
+      } catch (error) {
+        console.error('Error fetching following:', error);
+      }
     };
     fetchFollowing();
   }, [user]);
@@ -72,50 +76,18 @@ const FindFriends = () => {
       if (!user) return;
       setLoadingTopSurfers(true);
 
-      // Get follower counts for all users
-      const { data: followCounts } = await supabase
-        .from('follows')
-        .select('following_id');
-
-      if (!followCounts) {
-        setLoadingTopSurfers(false);
-        return;
-      }
-
-      // Count followers per user
-      const counts: Record<string, number> = {};
-      followCounts.forEach(f => {
-        counts[f.following_id] = (counts[f.following_id] || 0) + 1;
-      });
-
-      // Sort by count and get top 5 (excluding current user)
-      const topUserIds = Object.entries(counts)
-        .filter(([userId]) => userId !== user.id)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([userId]) => userId);
-
-      if (topUserIds.length === 0) {
-        setLoadingTopSurfers(false);
-        return;
-      }
-
-      // Fetch profiles for top users
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('user_id, display_name, bio, avatar_url')
-        .in('user_id', topUserIds);
-
-      if (profiles) {
-        // Maintain order by follower count
-        const orderedProfiles = topUserIds
-          .map(userId => profiles.find(p => p.user_id === userId))
-          .filter(Boolean)
-          .map(p => ({
-            ...p!,
-            is_following: following.has(p!.user_id),
+      try {
+        // TODO: Add top surfers endpoint to backend
+        const data = await api.social.getTopSurfers(user.id);
+        if (data) {
+          const orderedProfiles = data.map((p: any) => ({
+            ...p,
+            is_following: following.has(p.user_id),
           }));
-        setTopSurfers(orderedProfiles);
+          setTopSurfers(orderedProfiles);
+        }
+      } catch (error) {
+        console.error('Error fetching top surfers:', error);
       }
       setLoadingTopSurfers(false);
     };
@@ -132,20 +104,21 @@ const FindFriends = () => {
         return;
       }
 
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('user_id, display_name, bio, avatar_url')
-        .neq('user_id', user.id)
-        .ilike('display_name', `%${searchQuery}%`)
-        .limit(5);
-
-      if (profiles) {
-        setSuggestions(profiles.map(p => ({
-          ...p,
-          is_following: following.has(p.user_id),
-        })));
-        setShowSuggestions(true);
-      } else {
+      try {
+        const profiles = await api.profiles.search(searchQuery, 5);
+        if (profiles) {
+          setSuggestions(profiles
+            .filter((p: any) => p.user_id !== user.id)
+            .map((p: any) => ({
+              ...p,
+              is_following: following.has(p.user_id),
+            })));
+          setShowSuggestions(true);
+        } else {
+          setSuggestions([]);
+        }
+      } catch (error) {
+        console.error('Error fetching suggestions:', error);
         setSuggestions([]);
       }
     };
@@ -161,18 +134,20 @@ const FindFriends = () => {
     setHasSearched(true);
     setCurrentPage(1);
     
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('user_id, display_name, bio, avatar_url')
-      .neq('user_id', user.id)
-      .ilike('display_name', `%${searchQuery}%`);
-
-    if (profiles) {
-      setResults(profiles.map(p => ({
-        ...p,
-        is_following: following.has(p.user_id),
-      })));
-    } else {
+    try {
+      const profiles = await api.profiles.search(searchQuery);
+      if (profiles) {
+        setResults(profiles
+          .filter((p: any) => p.user_id !== user.id)
+          .map((p: any) => ({
+            ...p,
+            is_following: following.has(p.user_id),
+          })));
+      } else {
+        setResults([]);
+      }
+    } catch (error) {
+      console.error('Error searching:', error);
       setResults([]);
     }
     setSearching(false);
@@ -183,24 +158,34 @@ const FindFriends = () => {
     navigate(`/profile/${result.user_id}`);
   };
 
-  const handleFollow = async (userId: string) => {
+  const handleFollow = async (targetUserId: string) => {
     if (!user) return;
-    await supabase.from('follows').insert({ follower_id: user.id, following_id: userId });
-    setFollowing(prev => new Set([...prev, userId]));
-    setResults(results.map(r => r.user_id === userId ? { ...r, is_following: true } : r));
-    setSuggestions(suggestions.map(s => s.user_id === userId ? { ...s, is_following: true } : s));
-    setTopSurfers(topSurfers.map(t => t.user_id === userId ? { ...t, is_following: true } : t));
-    toast({ title: 'Now following!' });
+    try {
+      await api.social.follow(user.id, targetUserId);
+      setFollowing(prev => new Set([...prev, targetUserId]));
+      setResults(results.map(r => r.user_id === targetUserId ? { ...r, is_following: true } : r));
+      setSuggestions(suggestions.map(s => s.user_id === targetUserId ? { ...s, is_following: true } : s));
+      setTopSurfers(topSurfers.map(t => t.user_id === targetUserId ? { ...t, is_following: true } : t));
+      toast({ title: 'Now following!' });
+    } catch (error) {
+      console.error('Error following:', error);
+      toast({ title: 'Failed to follow', variant: 'destructive' });
+    }
   };
 
-  const handleUnfollow = async (userId: string) => {
+  const handleUnfollow = async (targetUserId: string) => {
     if (!user) return;
-    await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', userId);
-    setFollowing(prev => { const next = new Set(prev); next.delete(userId); return next; });
-    setResults(results.map(r => r.user_id === userId ? { ...r, is_following: false } : r));
-    setSuggestions(suggestions.map(s => s.user_id === userId ? { ...s, is_following: false } : s));
-    setTopSurfers(topSurfers.map(t => t.user_id === userId ? { ...t, is_following: false } : t));
-    toast({ title: 'Unfollowed' });
+    try {
+      await api.social.unfollow(user.id, targetUserId);
+      setFollowing(prev => { const next = new Set(prev); next.delete(targetUserId); return next; });
+      setResults(results.map(r => r.user_id === targetUserId ? { ...r, is_following: false } : r));
+      setSuggestions(suggestions.map(s => s.user_id === targetUserId ? { ...s, is_following: false } : s));
+      setTopSurfers(topSurfers.map(t => t.user_id === targetUserId ? { ...t, is_following: false } : t));
+      toast({ title: 'Unfollowed' });
+    } catch (error) {
+      console.error('Error unfollowing:', error);
+      toast({ title: 'Failed to unfollow', variant: 'destructive' });
+    }
   };
 
   const goToPage = (page: number) => {
@@ -256,7 +241,7 @@ const FindFriends = () => {
                     </Avatar>
                     <div>
                       <p className="font-medium text-sm text-foreground">{result.display_name || 'Surfer'}</p>
-                      {result.bio && <p className="text-xs text-muted-foreground line-clamp-1">{result.bio}</p>}
+                      {result.home_break && <p className="text-xs text-muted-foreground line-clamp-1">{result.home_break}</p>}
                     </div>
                   </Link>
                   {result.is_following ? (
@@ -292,7 +277,7 @@ const FindFriends = () => {
                       </Avatar>
                       <div>
                         <h3 className="font-semibold text-foreground">{result.display_name || 'Surfer'}</h3>
-                        {result.bio && <p className="text-sm text-muted-foreground line-clamp-1">{result.bio}</p>}
+                        {result.home_break && <p className="text-sm text-muted-foreground line-clamp-1">{result.home_break}</p>}
                       </div>
                     </Link>
                     {result.is_following ? (
@@ -338,7 +323,7 @@ const FindFriends = () => {
                   </Avatar>
                   <div>
                     <h3 className="font-semibold text-foreground">{result.display_name || 'Surfer'}</h3>
-                    {result.bio && <p className="text-sm text-muted-foreground line-clamp-1">{result.bio}</p>}
+                    {result.home_break && <p className="text-sm text-muted-foreground line-clamp-1">{result.home_break}</p>}
                   </div>
                 </Link>
                 {result.is_following ? (

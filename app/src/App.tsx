@@ -41,6 +41,7 @@ const App = () => (
             <Route path="/sessions" element={<Sessions />} />
             <Route path="/log-session" element={<LogSession />} />
             <Route path="/quiver" element={<Quiver />} />
+            <Route path="/quiver/:userId" element={<Quiver />} />
             <Route path="/reports" element={<SpotReports />} />
             <Route path="/maps" element={<ExploreDisclaimer />} />
             <Route path="/explore" element={<Maps />} />

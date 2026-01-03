@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import Layout from '@/components/layout/Layout';
@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Waves, Cloud, Wind, Send, MessageCircle, Reply, X, AlertCircle, Sunrise, Sun, Sunset, Search, MapPin, Camera, BookOpen, ChevronLeft, ChevronRight, Trash2, Star, ArrowLeft, GripVertical, Droplets, Ruler } from 'lucide-react';
 import { format, startOfDay, parseISO, getHours } from 'date-fns';
@@ -18,7 +18,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import shakaIcon from '@/assets/shaka.png';
 import kookIcon from '@/assets/kook.png';
 
-const MAPBOX_TOKEN = 'pk.eyJ1Ijoicm9icm9uYXluZSIsImEiOiJjbWpwYWI0dWYyODJmM2RweTN1MjBjN3pqIn0.72-EvJIHzZaucikkpia5rg';
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 'pk.eyJ1Ijoicm9icm9uYXluZSIsImEiOiJjbWpwYWI0dWYyODJmM2RweTN1MjBjN3pqIn0.72-EvJIHzZaucikkpia5rg';
 
 // Time of day options
 type TimeOfDay = 'morning' | 'midday' | 'afternoon';
@@ -63,20 +63,24 @@ const pointsToRating = (avgPoints: number): SpotRating => {
 // Get current time window based on local time
 const getCurrentTimeWindow = (): TimeOfDay => {
   const hour = new Date().getHours();
-  // Morning: 12am-9am, Midday: 10am-2pm, Afternoon: 2pm-11:59pm
-  if (hour >= 0 && hour < 10) return 'morning';
+  // Morning: 5am-10am, Midday: 10am-2pm, Afternoon: 2pm-7pm
+  if (hour >= 5 && hour < 10) return 'morning';
   if (hour >= 10 && hour < 14) return 'midday';
-  return 'afternoon';
+  if (hour >= 14 && hour < 19) return 'afternoon';
+  // Outside surf hours, show most recent relevant window
+  if (hour < 5) return 'afternoon'; // Late night, show yesterday's afternoon
+  return 'afternoon'; // After 7pm, show afternoon
 };
 
 // Determine time window for a session based on session_date (hour) in local time
 const getSessionTimeWindow = (sessionDate: string): TimeOfDay | null => {
   const date = parseISO(sessionDate);
   const hour = date.getHours(); // Uses local timezone
-  // Morning: 12am-9am, Midday: 10am-2pm, Afternoon: 2pm-11:59pm
-  if (hour >= 0 && hour < 10) return 'morning';
+  // Morning: 5am-10am, Midday: 10am-2pm, Afternoon: 2pm-7pm
+  if (hour >= 5 && hour < 10) return 'morning';
   if (hour >= 10 && hour < 14) return 'midday';
-  return 'afternoon';
+  if (hour >= 14 && hour < 19) return 'afternoon';
+  return null; // Outside defined time windows
 };
 
 // Normalize rating string for matching
@@ -190,17 +194,12 @@ const SpotReports = () => {
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
 
-  // Check admin status
+  // Check admin status - TODO: Add admin check endpoint
   useEffect(() => {
     const checkAdmin = async () => {
       if (!user) return;
-      const { data } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('role', 'admin')
-        .maybeSingle();
-      setIsAdmin(!!data);
+      // TODO: Implement admin check via API
+      setIsAdmin(false);
     };
     checkAdmin();
   }, [user]);
@@ -209,102 +208,30 @@ const SpotReports = () => {
   const fetchFavorites = async () => {
     if (!user) return;
     setLoadingFavorites(true);
-    
-    const { data: favoritesData } = await supabase
-      .from('favorite_spots')
-      .select('id, spot_id, display_order')
-      .eq('user_id', user.id)
-      .order('display_order', { ascending: true });
-    
-    if (favoritesData && favoritesData.length > 0 && spots.length > 0) {
-      const enriched = favoritesData.map(fav => ({
-        ...fav,
-        spot: spots.find(s => s.id === fav.spot_id)!
-      })).filter(f => f.spot);
-      
-      setFavoriteSpots(enriched);
-      
-      // Fetch conditions for each favorite spot
-      const conditionsMap: Record<string, SpotConditions> = {};
-      const todayStart = startOfDay(new Date()).toISOString();
-      const todayEnd = new Date().toISOString();
-      
-      for (const fav of enriched) {
-        const { data: sessions } = await supabase
-          .from('sessions')
-          .select('session_date, rating, wave_height, shape')
-          .eq('is_public', true)
-          .ilike('location', `%${fav.spot.name}%`)
-          .gte('session_date', todayStart)
-          .lte('session_date', todayEnd)
-          .order('session_date', { ascending: false });
-        
-        const windowSessions: Record<TimeOfDay, { ratings: number[]; heights: string[]; shapes: string[] }> = {
-          morning: { ratings: [], heights: [], shapes: [] },
-          midday: { ratings: [], heights: [], shapes: [] },
-          afternoon: { ratings: [], heights: [], shapes: [] },
-        };
-        
-        sessions?.forEach(session => {
-          const window = getSessionTimeWindow(session.session_date);
-          if (window) {
-            if (session.rating) {
-              const normalizedRating = normalizeRating(session.rating);
-              const config = RATING_CONFIG[normalizedRating];
-              if (config && config.points >= 0) {
-                windowSessions[window].ratings.push(config.points);
-              }
-            }
-            if (session.wave_height) {
-              windowSessions[window].heights.push(session.wave_height);
-            }
-            if (session.shape) {
-              windowSessions[window].shapes.push(session.shape);
-            }
-          }
-        });
-        
-        const calculateAvgRating = (ratings: number[]): SpotRating => {
-          if (ratings.length === 0) return 'unknown';
-          const avg = ratings.reduce((a, b) => a + b, 0) / ratings.length;
-          return pointsToRating(avg);
-        };
-        
-        const getMostCommon = (items: string[]): string => {
-          if (items.length === 0) return '—';
-          const counts: Record<string, number> = {};
-          items.forEach(h => { counts[h] = (counts[h] || 0) + 1; });
-          return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
-        };
-        
-        conditionsMap[fav.spot_id] = {
-          rating: {
-            morning: calculateAvgRating(windowSessions.morning.ratings),
-            midday: calculateAvgRating(windowSessions.midday.ratings),
-            afternoon: calculateAvgRating(windowSessions.afternoon.ratings),
-          },
-          size: {
-            morning: getMostCommon(windowSessions.morning.heights),
-            midday: getMostCommon(windowSessions.midday.heights),
-            afternoon: getMostCommon(windowSessions.afternoon.heights),
-          },
-          shape: {
-            morning: getMostCommon(windowSessions.morning.shapes),
-            midday: getMostCommon(windowSessions.midday.shapes),
-            afternoon: getMostCommon(windowSessions.afternoon.shapes),
-          },
-          // Mock live data - 3ft 15s NW swell, 8 kts E wind
-          swell: { morning: '3ft 15s NW', midday: '3ft 15s NW', afternoon: '3ft 15s NW' },
-          wind: { morning: '8 kts E', midday: '8 kts E', afternoon: '8 kts E' },
-          tide: { morning: '— ft', midday: '— ft', afternoon: '— ft' },
-        };
+    try {
+      const favorites = await api.spots.getFavorites(user.id);
+      if (favorites) {
+        setFavoriteSpots(favorites.map((f: any) => ({
+          id: f.id,
+          spot_id: f.id,
+          display_order: f.display_order || 0,
+          spot: {
+            id: f.id,
+            name: f.name,
+            location: f.location || '',
+            latitude: f.latitude,
+            longitude: f.longitude,
+            description: f.description || null,
+            difficulty: f.difficulty || null,
+            break_type: f.break_type || null,
+          } as Spot,
+        })));
       }
-      
-      setFavoriteConditions(conditionsMap);
-    } else {
-      setFavoriteSpots([]);
+    } catch (error) {
+      console.error('Error fetching favorites:', error);
+    } finally {
+      setLoadingFavorites(false);
     }
-    setLoadingFavorites(false);
   };
 
   useEffect(() => {
@@ -313,28 +240,83 @@ const SpotReports = () => {
     }
   }, [user, spots]);
 
+  // Fetch conditions for all favorite spots (today's consensus)
+  useEffect(() => {
+    const fetchFavoriteConditions = async () => {
+      if (favoriteSpots.length === 0) return;
+      
+      const conditionsMap: Record<string, SpotConditions> = {};
+      
+      // Convert rating string to SpotRating type
+      const ratingToSpotRating = (rating: string | null): SpotRating => {
+        if (!rating) return 'unknown';
+        const normalized = rating.toLowerCase();
+        if (normalized === 'dog shit') return 'dog shit';
+        if (normalized === 'poor') return 'poor';
+        if (normalized === 'decent') return 'decent';
+        if (normalized === 'fun') return 'fun';
+        if (normalized === 'epic') return 'epic';
+        return 'unknown';
+      };
+      
+      await Promise.all(
+        favoriteSpots.map(async (fav) => {
+          try {
+            const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/spots/${fav.spot_id}/report`);
+            if (response.ok) {
+              const data = await response.json();
+              const consensus = data.consensus;
+              
+              conditionsMap[fav.spot_id] = {
+                rating: {
+                  morning: ratingToSpotRating(consensus.morning?.rating),
+                  midday: ratingToSpotRating(consensus.midday?.rating),
+                  afternoon: ratingToSpotRating(consensus.afternoon?.rating),
+                },
+                size: {
+                  morning: consensus.morning?.wave_height || '—',
+                  midday: consensus.midday?.wave_height || '—',
+                  afternoon: consensus.afternoon?.wave_height || '—',
+                },
+                shape: {
+                  morning: consensus.morning?.shape || '—',
+                  midday: consensus.midday?.shape || '—',
+                  afternoon: consensus.afternoon?.shape || '—',
+                },
+                swell: { morning: '—', midday: '—', afternoon: '—' },
+                wind: { morning: '—', midday: '—', afternoon: '—' },
+                tide: { morning: '—', midday: '—', afternoon: '—' },
+              };
+            }
+          } catch (error) {
+            console.error(`Error fetching conditions for spot ${fav.spot_id}:`, error);
+          }
+        })
+      );
+      
+      setFavoriteConditions(conditionsMap);
+    };
+    
+    fetchFavoriteConditions();
+  }, [favoriteSpots]);
+
   // Toggle favorite for current spot
   const toggleFavorite = async () => {
     if (!user || !selectedSpot || selectedSpot.id.startsWith('temp-')) return;
-    
-    const existing = favoriteSpots.find(f => f.spot_id === selectedSpot.id);
-    
-    if (existing) {
-      await supabase.from('favorite_spots').delete().eq('id', existing.id);
-      setFavoriteSpots(prev => prev.filter(f => f.id !== existing.id));
-      toast({ title: 'Removed from favorites' });
-    } else {
-      const maxOrder = favoriteSpots.length > 0 ? Math.max(...favoriteSpots.map(f => f.display_order)) : -1;
-      const { data, error } = await supabase
-        .from('favorite_spots')
-        .insert({ user_id: user.id, spot_id: selectedSpot.id, display_order: maxOrder + 1 })
-        .select()
-        .single();
-      
-      if (data && !error) {
-        setFavoriteSpots(prev => [...prev, { ...data, spot: selectedSpot }]);
+    try {
+      const isFav = favoriteSpots.some(f => f.spot_id === selectedSpot.id);
+      if (isFav) {
+        await api.spots.removeFavorite(user.id, selectedSpot.id);
+        setFavoriteSpots(prev => prev.filter(f => f.spot_id !== selectedSpot.id));
+        toast({ title: 'Removed from favorites' });
+      } else {
+        await api.spots.addFavorite(user.id, selectedSpot.id);
+        await fetchFavorites(); // Refresh to get updated list
         toast({ title: 'Added to favorites' });
       }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      toast({ title: 'Failed to update favorites', variant: 'destructive' });
     }
   };
 
@@ -342,10 +324,17 @@ const SpotReports = () => {
   const removeFavorite = async (e: React.MouseEvent, favoriteId: string) => {
     e.stopPropagation();
     if (!user) return;
-    
-    await supabase.from('favorite_spots').delete().eq('id', favoriteId);
-    setFavoriteSpots(prev => prev.filter(f => f.id !== favoriteId));
-    toast({ title: 'Removed from favorites' });
+    try {
+      const favorite = favoriteSpots.find(f => f.id === favoriteId);
+      if (favorite) {
+        await api.spots.removeFavorite(user.id, favorite.spot_id);
+        setFavoriteSpots(prev => prev.filter(f => f.id !== favoriteId));
+        toast({ title: 'Removed from favorites' });
+      }
+    } catch (error) {
+      console.error('Error removing favorite:', error);
+      toast({ title: 'Failed to remove favorite', variant: 'destructive' });
+    }
   };
 
   // Handle drag and drop reordering
@@ -372,12 +361,7 @@ const SpotReports = () => {
   const handleDragEnd = async () => {
     if (!draggedItem) return;
     setDraggedItem(null);
-    
-    // Update display_order in database
-    const updates = favoriteSpots.map((fav, index) => 
-      supabase.from('favorite_spots').update({ display_order: index }).eq('id', fav.id)
-    );
-    await Promise.all(updates);
+    // TODO: Update display_order via API
   };
 
 // Padding for desktop flyTo to offset for the report panel on the right
@@ -387,10 +371,8 @@ const SpotReports = () => {
 // Handle clicking on a favorite spot
   const handleFavoriteClick = (spot: Spot) => {
     const isMobile = window.matchMedia('(max-width: 767px)').matches;
-    setAccessedFromFavorites(isMobile); // Only track for mobile back navigation
-    if (isMobile) {
-      setShowFavorites(false); // Only close favorites on mobile
-    }
+    setAccessedFromFavorites(true); // Track for both mobile and desktop back navigation
+    setShowFavorites(false); // Close favorites panel when clicking a spot
     setSelectedSpot(spot);
     setSelectedContentTab('local-reports');
     
@@ -431,7 +413,7 @@ const SpotReports = () => {
 
 // Handle back to favorites
   const handleBackToFavorites = () => {
-    setShowCrosshairs(false);
+    // Don't disable crosshairs - keep them visible
     setSelectedSpot(null);
     setAccessedFromFavorites(false);
     setShowFavorites(true);
@@ -443,19 +425,67 @@ const SpotReports = () => {
   // Fetch spots from database
   useEffect(() => {
     const fetchSpots = async () => {
-      const { data: dbSpots } = await supabase
-        .from('spots')
-        .select('id, name, location, latitude, longitude, description, difficulty, break_type');
-      
-      if (dbSpots && dbSpots.length > 0) {
-        setSpots(dbSpots as Spot[]);
+      try {
+        const dbSpots = await api.spots.getAll();
+        if (dbSpots && dbSpots.length > 0) {
+          setSpots(dbSpots as Spot[]);
+        }
+      } catch (error) {
+        console.error('Error fetching spots:', error);
       }
     };
     fetchSpots();
   }, []);
 
 
-  // Fetch spot conditions from session data
+  // Live spot data state (swell, wind, tide - separate from consensus)
+  const [liveData, setLiveData] = useState<{
+    swell: string | null;
+    swellDirection: string | null;
+    wind: string | null;
+    windDirection: string | null;
+    windDirectionDegrees: number | null;
+    tide: string | null;
+  } | null>(null);
+  const [loadingLiveData, setLoadingLiveData] = useState(false);
+
+  // Fetch live spot data from surf_analytics
+  useEffect(() => {
+    const fetchLiveData = async () => {
+      if (!selectedSpot || selectedSpot.id.startsWith('temp-')) {
+        setLiveData(null);
+        return;
+      }
+      
+      setLoadingLiveData(true);
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/spots/${selectedSpot.id}/live`);
+        if (response.ok) {
+          const data = await response.json();
+          setLiveData({
+            swell: data.swell?.formatted || null,
+            swellDirection: data.swell?.direction || null,
+            wind: data.wind?.formatted || null,
+            windDirection: data.wind?.direction || null,
+            windDirectionDegrees: data.wind?.direction_degrees || null,
+            tide: data.tide?.formatted || null,
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching live data:', error);
+        setLiveData(null);
+      } finally {
+        setLoadingLiveData(false);
+      }
+    };
+    
+    fetchLiveData();
+    // Refresh live data every 5 minutes
+    const interval = setInterval(fetchLiveData, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [selectedSpot]);
+
+  // Fetch spot conditions (user consensus) from session data
   useEffect(() => {
     const fetchSpotConditions = async () => {
       if (!selectedSpot) {
@@ -466,102 +496,77 @@ const SpotReports = () => {
 
       setLoadingConditions(true);
       
-      const todayStart = startOfDay(new Date()).toISOString();
-      const todayEnd = new Date().toISOString();
-
-      // Fetch today's sessions at this spot
-      const { data: sessions } = await supabase
-        .from('sessions')
-        .select('session_date, rating, wave_height, shape')
-        .eq('is_public', true)
-        .ilike('location', `%${selectedSpot.name}%`)
-        .gte('session_date', todayStart)
-        .lte('session_date', todayEnd)
-        .order('session_date', { ascending: false });
-
-      // Calculate average rating per time window
-      const windowSessions: Record<TimeOfDay, { ratings: number[]; heights: string[]; shapes: string[] }> = {
-        morning: { ratings: [], heights: [], shapes: [] },
-        midday: { ratings: [], heights: [], shapes: [] },
-        afternoon: { ratings: [], heights: [], shapes: [] },
-      };
-
-      // Track which time windows have sessions to determine the most recent one
-      let mostRecentTimeWindow: TimeOfDay | null = null;
-
-      sessions?.forEach((session, index) => {
-        const window = getSessionTimeWindow(session.session_date);
-        if (window) {
-          // The first session (most recent) determines the default tab
-          if (index === 0 && session.rating) {
-            mostRecentTimeWindow = window;
-          }
+      try {
+        // Fetch spot report with time-windowed consensus from API (today's sessions only)
+        const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/spots/${selectedSpot.id}/report`);
+        if (response.ok) {
+          const data = await response.json();
+          const consensus = data.consensus;
           
-          if (session.rating) {
-            const normalizedRating = normalizeRating(session.rating);
-            const config = RATING_CONFIG[normalizedRating];
-            if (config && config.points >= 0) {
-              windowSessions[window].ratings.push(config.points);
-            }
+          // Convert rating string to SpotRating type (most frequent rating from sessions)
+          const ratingToSpotRating = (rating: string | null): SpotRating => {
+            if (!rating) return 'unknown';
+            const normalized = rating.toLowerCase();
+            if (normalized === 'dog shit') return 'dog shit';
+            if (normalized === 'poor') return 'poor';
+            if (normalized === 'decent') return 'decent';
+            if (normalized === 'fun') return 'fun';
+            if (normalized === 'epic') return 'epic';
+            return 'unknown';
+          };
+          
+          setSpotConditions({
+            rating: {
+              morning: ratingToSpotRating(consensus.morning?.rating),
+              midday: ratingToSpotRating(consensus.midday?.rating),
+              afternoon: ratingToSpotRating(consensus.afternoon?.rating),
+            },
+            size: {
+              morning: consensus.morning?.wave_height || '—',
+              midday: consensus.midday?.wave_height || '—',
+              afternoon: consensus.afternoon?.wave_height || '—',
+            },
+            shape: {
+              morning: consensus.morning?.shape || '—',
+              midday: consensus.midday?.shape || '—',
+              afternoon: consensus.afternoon?.shape || '—',
+            },
+            // Live data is now separate - these are just placeholders
+            swell: { morning: '—', midday: '—', afternoon: '—' },
+            wind: { morning: '—', midday: '—', afternoon: '—' },
+            tide: { morning: '—', midday: '—', afternoon: '—' },
+          });
+          
+          // Set time of day to the last time period with consensus data
+          if (data.latest_consensus_time) {
+            setSelectedTimeOfDay(data.latest_consensus_time as TimeOfDay);
+          } else {
+            setSelectedTimeOfDay(getCurrentTimeWindow());
           }
-          if (session.wave_height) {
-            windowSessions[window].heights.push(session.wave_height);
-          }
-          if (session.shape) {
-            windowSessions[window].shapes.push(session.shape);
-          }
+        } else {
+          // Fallback to empty conditions
+          setSpotConditions({
+            rating: { morning: 'unknown', midday: 'unknown', afternoon: 'unknown' },
+            size: { morning: '—', midday: '—', afternoon: '—' },
+            shape: { morning: '—', midday: '—', afternoon: '—' },
+            swell: { morning: '—', midday: '—', afternoon: '—' },
+            wind: { morning: '—', midday: '—', afternoon: '—' },
+            tide: { morning: '—', midday: '—', afternoon: '—' },
+          });
         }
-      });
-
-      // Default to most recent session's time window, or current time if no sessions or all unknown
-      const hasAnyRating = windowSessions.morning.ratings.length > 0 || 
-                           windowSessions.midday.ratings.length > 0 || 
-                           windowSessions.afternoon.ratings.length > 0;
-      
-      if (mostRecentTimeWindow && hasAnyRating) {
-        setSelectedTimeOfDay(mostRecentTimeWindow);
-      } else {
-        // All unknown, default to current time window
-        setSelectedTimeOfDay(getCurrentTimeWindow());
+      } catch (error) {
+        console.error('Error fetching spot conditions:', error);
+        setSpotConditions({
+          rating: { morning: 'unknown', midday: 'unknown', afternoon: 'unknown' },
+          size: { morning: '—', midday: '—', afternoon: '—' },
+          shape: { morning: '—', midday: '—', afternoon: '—' },
+          swell: { morning: '—', midday: '—', afternoon: '—' },
+          wind: { morning: '—', midday: '—', afternoon: '—' },
+          tide: { morning: '—', midday: '—', afternoon: '—' },
+        });
+      } finally {
+        setLoadingConditions(false);
       }
-
-      const calculateAvgRating = (ratings: number[]): SpotRating => {
-        if (ratings.length === 0) return 'unknown';
-        const avg = ratings.reduce((a, b) => a + b, 0) / ratings.length;
-        return pointsToRating(avg);
-      };
-
-      const getMostCommon = (items: string[]): string => {
-        if (items.length === 0) return '—';
-        const counts: Record<string, number> = {};
-        items.forEach(h => { counts[h] = (counts[h] || 0) + 1; });
-        return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
-      };
-
-setSpotConditions({
-        // Consensus from session data
-        rating: {
-          morning: calculateAvgRating(windowSessions.morning.ratings),
-          midday: calculateAvgRating(windowSessions.midday.ratings),
-          afternoon: calculateAvgRating(windowSessions.afternoon.ratings),
-        },
-        size: {
-          morning: getMostCommon(windowSessions.morning.heights),
-          midday: getMostCommon(windowSessions.midday.heights),
-          afternoon: getMostCommon(windowSessions.afternoon.heights),
-        },
-        shape: {
-          morning: getMostCommon(windowSessions.morning.shapes),
-          midday: getMostCommon(windowSessions.midday.shapes),
-          afternoon: getMostCommon(windowSessions.afternoon.shapes),
-        },
-        // Mock live data - 3ft 15s NW swell, 8 kts E wind
-        swell: { morning: '3ft 15s NW', midday: '3ft 15s NW', afternoon: '3ft 15s NW' },
-        wind: { morning: '8 kts E', midday: '8 kts E', afternoon: '8 kts E' },
-        tide: { morning: '— ft', midday: '— ft', afternoon: '— ft' },
-      });
-      
-      setLoadingConditions(false);
     };
 
     fetchSpotConditions();
@@ -570,33 +575,65 @@ setSpotConditions({
   // Spot ratings state for map markers - use most recent rating instead of current time window
   const [spotRatings, setSpotRatings] = useState<Record<string, SpotRating>>({});
 
-  // Fetch all spot ratings based on most recent session for each spot
+  // Fetch all spot ratings based on TODAY's sessions within time windows only
   const fetchAllSpotRatings = async () => {
-    const todayStart = startOfDay(new Date()).toISOString();
-    const todayEnd = new Date().toISOString();
-
-    const { data: sessions } = await supabase
-      .from('sessions')
-      .select('location, session_date, rating')
-      .gte('session_date', todayStart)
-      .lte('session_date', todayEnd)
-      .eq('is_public', true)
-      .order('session_date', { ascending: false });
-
-    // Group by location and take the most recent session's rating
-    const mostRecentRatings: Record<string, SpotRating> = {};
-    
-    sessions?.forEach(session => {
-      // Only take the first (most recent) rating for each location
-      if (!mostRecentRatings[session.location] && session.rating) {
-        const normalizedRating = normalizeRating(session.rating);
-        if (normalizedRating !== 'unknown') {
-          mostRecentRatings[session.location] = normalizedRating;
+    try {
+      // Fetch recent public sessions to get ratings for each spot
+      const sessions = await api.sessions.getPublic(200, 0);
+      
+      // Filter to only TODAY's sessions that are within valid time windows
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Time windows: morning 5am-10am, midday 10am-2pm, afternoon 2pm-7pm
+      const isInTimeWindow = (hour: number) => {
+        return (hour >= 5 && hour < 10) ||   // morning
+               (hour >= 10 && hour < 14) ||  // midday
+               (hour >= 14 && hour < 19);    // afternoon
+      };
+      
+      const todaysSessions = sessions.filter((session: any) => {
+        const sessionDate = new Date(session.session_date);
+        const sessionDay = new Date(sessionDate);
+        sessionDay.setHours(0, 0, 0, 0);
+        
+        // Must be today AND within a valid time window
+        const hour = sessionDate.getHours();
+        return sessionDay.getTime() === today.getTime() && isInTimeWindow(hour);
+      });
+      
+      // Group sessions by location and get the most frequent rating for each
+      const ratingsMap: Record<string, SpotRating[]> = {};
+      
+      todaysSessions.forEach((session: any) => {
+        const location = session.location;
+        const rating = session.rating?.toLowerCase();
+        if (rating) {
+          if (!ratingsMap[location]) ratingsMap[location] = [];
+          ratingsMap[location].push(rating as SpotRating);
         }
-      }
-    });
-    
-    setSpotRatings(mostRecentRatings);
+      });
+      
+      // Get the most frequent rating for each location
+      const simpleRatings: Record<string, SpotRating> = {};
+      Object.keys(ratingsMap).forEach(location => {
+        const ratings = ratingsMap[location];
+        if (ratings.length === 0) return;
+        
+        // Count occurrences of each rating
+        const counts: Record<string, number> = {};
+        ratings.forEach(r => { counts[r] = (counts[r] || 0) + 1; });
+        
+        // Get the most frequent
+        const mostFrequent = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+        simpleRatings[location] = mostFrequent as SpotRating;
+      });
+      
+      setSpotRatings(simpleRatings);
+    } catch (error) {
+      console.error('Error fetching spot ratings:', error);
+      setSpotRatings({});
+    }
   };
 
   useEffect(() => {
@@ -622,9 +659,9 @@ setSpotConditions({
     return RATING_CONFIG[rating].color;
   };
 
-  // Format timestamp in spot's timezone
+  // Format timestamp in user's local timezone
   const formatCommentTime = (timestamp: string) => {
-    return formatInTimeZone(new Date(timestamp), timezone, 'h:mm a');
+    return format(new Date(timestamp), 'h:mm a');
   };
 
   // Handle search
@@ -757,21 +794,39 @@ const handleSpotClick = (spot: Spot) => {
   // Initialize desktop map
   const [mapReady, setMapReady] = useState(false);
   
+  // Use effect that runs when user/loading changes to initialize the map
+  // This ensures map initializes after auth is complete and container is rendered
   useEffect(() => {
-    if (!mapContainerDesktop.current || map.current) return;
+    // Don't initialize if still loading or no user
+    if (loading || !user) return;
+    
+    // Wait for container to be available
+    if (!mapContainerDesktop.current) return;
+    
+    // If map already exists and is valid, skip initialization
+    if (map.current) return;
 
+    // Clear container before initializing to prevent "container should be empty" error
+    mapContainerDesktop.current.innerHTML = '';
+    
     mapboxgl.accessToken = MAPBOX_TOKEN;
     
     try {
-      map.current = new mapboxgl.Map({
+      const newMap = new mapboxgl.Map({
         container: mapContainerDesktop.current,
         style: 'mapbox://styles/mapbox/outdoors-v12',
         center: [-117.2, 33.2],
         zoom: 7.5,
       });
       
-      map.current.on('load', () => {
+      map.current = newMap;
+      
+      newMap.on('load', () => {
         setMapReady(true);
+      });
+      
+      newMap.on('error', (e) => {
+        console.error('Mapbox error:', e);
       });
 
       // Handle window resize (e.g., going fullscreen)
@@ -792,15 +847,25 @@ const handleSpotClick = (spot: Spot) => {
       };
     } catch (error) {
       console.error('Error initializing desktop map:', error);
+      map.current = null;
     }
-  }, []);
+  }, [loading, user]);
 
   // Initialize mobile map
   const [mobileMapReady, setMobileMapReady] = useState(false);
   
   useEffect(() => {
-    if (!mapContainerMobile.current || mapMobile.current) return;
+    // Don't initialize if still loading or no user
+    if (loading || !user) return;
+    
+    if (!mapContainerMobile.current) return;
+    
+    // If map already exists, skip initialization
+    if (mapMobile.current) return;
 
+    // Clear container before initializing
+    mapContainerMobile.current.innerHTML = '';
+    
     mapboxgl.accessToken = MAPBOX_TOKEN;
     
     try {
@@ -825,7 +890,7 @@ const handleSpotClick = (spot: Spot) => {
         setMobileMapReady(false);
       }
     };
-  }, []);
+  }, [loading, user]);
 
 
 // Store the last selected spot for centering when closing
@@ -932,18 +997,16 @@ const handleSpotClick = (spot: Spot) => {
   };
   
 // Add crosshairs to map at spot location
-  const addCrosshairsToMap = (mapInstance: mapboxgl.Map, spot: Spot, overlayRef: React.MutableRefObject<HTMLDivElement | null>, conditions: SpotConditions | null) => {
+  const addCrosshairsToMap = (mapInstance: mapboxgl.Map, spot: Spot, overlayRef: React.MutableRefObject<HTMLDivElement | null>) => {
     // Remove existing crosshairs
     if (overlayRef.current) {
       overlayRef.current.remove();
       overlayRef.current = null;
     }
     
-    // Get directions from spotConditions, use current time of day
-    const swellData = conditions?.swell[selectedTimeOfDay] || '3ft 15s NW';
-    const windData = conditions?.wind[selectedTimeOfDay] || '8 kts E';
-    const swellDirection = extractDirection(swellData);
-    const windDirection = extractDirection(windData);
+    // Get directions from live data
+    const swellDirection = liveData?.swellDirection || 'NW';
+    const windDirection = liveData?.windDirection || 'E';
     
     const overlay = createCrosshairsElement(swellDirection, windDirection);
     overlayRef.current = overlay;
@@ -991,14 +1054,14 @@ const handleSpotClick = (spot: Spot) => {
       
       // Desktop: only show if spot is selected (panel is open)
       if (map.current && mapReady && selectedSpot) {
-        addCrosshairsToMap(map.current, spotForCrosshairs, crosshairsDesktopRef, spotConditions);
+        addCrosshairsToMap(map.current, spotForCrosshairs, crosshairsDesktopRef);
       } else {
         removeCrosshairs(crosshairsDesktopRef);
       }
       
       // Mobile: show crosshairs even when panel is closed (using lastSelectedSpotRef)
       if (mapMobile.current && mobileMapReady) {
-        addCrosshairsToMap(mapMobile.current, spotForCrosshairs, crosshairsMobileRef, spotConditions);
+        addCrosshairsToMap(mapMobile.current, spotForCrosshairs, crosshairsMobileRef);
       }
     } else {
       removeCrosshairs(crosshairsDesktopRef);
@@ -1010,7 +1073,7 @@ const handleSpotClick = (spot: Spot) => {
       removeCrosshairs(crosshairsDesktopRef);
       removeCrosshairs(crosshairsMobileRef);
     };
-  }, [selectedSpot, showCrosshairs, mapReady, mobileMapReady, spotConditions, selectedTimeOfDay]);
+  }, [selectedSpot, showCrosshairs, mapReady, mobileMapReady, liveData]);
   
   // Hide crosshairs on user interaction (mouse/touch/wheel - not triggered by programmatic flyTo)
   useEffect(() => {
@@ -1138,62 +1201,26 @@ const handleSpotClick = (spot: Spot) => {
     });
   }, [spots, spotRatings, mobileMapReady]);
 
-  useEffect(() => {
-    const fetchComments = async () => {
-      if (!selectedSpot || !user) return;
-      
-      if (selectedSpot.id.startsWith('temp-')) {
-        setComments([]);
-        return;
-      }
-      
-      const todayStart = startOfDay(new Date()).toISOString();
-      
-      const { data } = await supabase
-        .from('forecast_comments')
-        .select('id, content, created_at, user_id, parent_id')
-        .eq('spot_id', selectedSpot.id)
-        .gte('created_at', todayStart)
-        .order('created_at', { ascending: false });
-      
-      if (data) {
-        const enriched: ReportComment[] = await Promise.all(data.map(async (c) => {
-          const [profileRes, likesRes, myLikeRes, kooksRes, myKookRes] = await Promise.all([
-            supabase.from('profiles').select('display_name, total_shakas_received').eq('user_id', c.user_id).maybeSingle(),
-            supabase.from('forecast_comment_likes').select('id', { count: 'exact' }).eq('comment_id', c.id),
-            supabase.from('forecast_comment_likes').select('id').eq('comment_id', c.id).eq('user_id', user.id).maybeSingle(),
-            supabase.from('forecast_comment_kooks').select('id', { count: 'exact' }).eq('comment_id', c.id),
-            supabase.from('forecast_comment_kooks').select('id').eq('comment_id', c.id).eq('user_id', user.id).maybeSingle(),
-          ]);
-          return { 
-            ...c, 
-            profile: profileRes.data,
-            likes_count: likesRes.count || 0,
-            kooks_count: kooksRes.count || 0,
-            is_liked: !!myLikeRes.data,
-            is_kooked: !!myKookRes.data,
-            replies: [],
-          };
-        }));
-
-        const topLevel = enriched.filter(c => !c.parent_id);
-        const repliesArr = enriched.filter(c => c.parent_id);
-        topLevel.forEach(c => {
-          c.replies = repliesArr.filter(r => r.parent_id === c.id);
-        });
-        
-        // Sort by score: (likes - kooks), highest first
-        topLevel.sort((a, b) => {
-          const scoreA = a.likes_count - a.kooks_count;
-          const scoreB = b.likes_count - b.kooks_count;
-          return scoreB - scoreA;
-        });
-        
-        setComments(topLevel);
-      }
-    };
-    fetchComments();
+  const fetchComments = useCallback(async () => {
+    if (!selectedSpot || !user) return;
+    
+    if (selectedSpot.id.startsWith('temp-')) {
+      setComments([]);
+      return;
+    }
+    
+    try {
+      const data = await api.forecast.getComments(selectedSpot.id, user.id);
+      setComments(data || []);
+    } catch (error) {
+      console.error('Error fetching comments:', error);
+      setComments([]);
+    }
   }, [selectedSpot, user]);
+
+  useEffect(() => {
+    fetchComments();
+  }, [fetchComments]);
 
   // Fetch photos for the selected spot from public sessions
   useEffect(() => {
@@ -1204,49 +1231,26 @@ const handleSpotClick = (spot: Spot) => {
       }
 
       setLoadingPhotos(true);
-      
-      const { data: sessions } = await supabase
-        .from('sessions')
-        .select('id, session_date, user_id, location')
-        .eq('is_public', true)
-        .ilike('location', `%${selectedSpot.name}%`);
-
-      if (!sessions || sessions.length === 0) {
+      try {
+        const photos = await api.spots.getPhotos(selectedSpot.id);
+        if (photos) {
+          setSpotPhotos(photos.map((p: any) => ({
+            id: p.id,
+            url: p.url,
+            media_type: p.media_type,
+            session_id: p.session_id,
+            session_date: p.session_date,
+            user_id: p.user_id,
+            profile: {
+              display_name: p.display_name,
+              avatar_url: p.avatar_url,
+            },
+          })));
+        }
+      } catch (error) {
+        console.error('Error fetching spot photos:', error);
         setSpotPhotos([]);
-        setLoadingPhotos(false);
-        return;
       }
-
-      const sessionIds = sessions.map(s => s.id);
-      
-      const { data: media } = await supabase
-        .from('session_media')
-        .select('id, url, media_type, session_id, user_id')
-        .in('session_id', sessionIds)
-        .like('media_type', 'image%');
-
-      if (!media || media.length === 0) {
-        setSpotPhotos([]);
-        setLoadingPhotos(false);
-        return;
-      }
-
-      const userIds = [...new Set(media.map(m => m.user_id))];
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('user_id, display_name, avatar_url')
-        .in('user_id', userIds);
-
-      const sessionDateMap = new Map(sessions.map(s => [s.id, s.session_date]));
-      const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
-
-      const enrichedPhotos: SpotPhoto[] = media.map(m => ({
-        ...m,
-        session_date: sessionDateMap.get(m.session_id) || '',
-        profile: profileMap.get(m.user_id) || null,
-      }));
-
-      setSpotPhotos(enrichedPhotos);
       setLoadingPhotos(false);
     };
 
@@ -1265,19 +1269,14 @@ const handleSpotClick = (spot: Spot) => {
       return;
     }
     
-    const { data, error } = await supabase.from('forecast_comments').insert({ 
-      spot_id: selectedSpot.id, 
-      user_id: user.id, 
-      content: newComment 
-    }).select().single();
-    
-    if (!error && data) {
-      const { data: profile } = await supabase.from('profiles').select('display_name, total_shakas_received').eq('user_id', user.id).maybeSingle();
-      setComments([{ ...data, profile, likes_count: 0, kooks_count: 0, is_liked: false, is_kooked: false, replies: [] }, ...comments]);
+    try {
+      await api.forecast.addComment(selectedSpot.id, newComment);
       setNewComment('');
-      toast({ title: 'Report posted!' });
-    } else if (error) {
-      toast({ title: 'Failed to post report', description: error.message, variant: 'destructive' });
+      fetchComments();
+      toast({ title: 'Comment posted!' });
+    } catch (error) {
+      console.error('Error posting comment:', error);
+      toast({ title: 'Failed to post comment', variant: 'destructive' });
     }
   };
 
@@ -1293,21 +1292,15 @@ const handleSpotClick = (spot: Spot) => {
       return;
     }
     
-    const { data, error } = await supabase.from('forecast_comments').insert({ 
-      spot_id: selectedSpot.id, 
-      user_id: user.id, 
-      content: replyContent,
-      parent_id: parentId,
-    }).select().single();
-    if (!error && data) {
-      const { data: profile } = await supabase.from('profiles').select('display_name, total_shakas_received').eq('user_id', user.id).maybeSingle();
-      setComments(comments.map(c => c.id === parentId ? {
-        ...c,
-        replies: [...(c.replies || []), { ...data, profile, likes_count: 0, kooks_count: 0, is_liked: false, is_kooked: false }],
-      } : c));
+    try {
+      await api.forecast.addComment(selectedSpot.id, replyContent, parentId);
       setReplyContent('');
       setReplyingTo(null);
+      fetchComments();
       toast({ title: 'Reply posted!' });
+    } catch (error) {
+      console.error('Error posting reply:', error);
+      toast({ title: 'Failed to post reply', variant: 'destructive' });
     }
   };
 
@@ -1322,47 +1315,14 @@ const handleSpotClick = (spot: Spot) => {
     
     try {
       if (isLiked) {
-        await supabase.from('forecast_comment_likes').delete().eq('comment_id', commentId).eq('user_id', user.id);
-        // Decrement total_shakas_received for comment owner
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('total_shakas_received')
-          .eq('user_id', commentUserId)
-          .maybeSingle();
-        if (profileData) {
-          await supabase
-            .from('profiles')
-            .update({ total_shakas_received: Math.max(0, (profileData.total_shakas_received || 0) - 1) })
-            .eq('user_id', commentUserId);
-        }
+        await api.forecast.unlikeComment(commentId);
       } else {
-        await supabase.from('forecast_comment_likes').insert({ comment_id: commentId, user_id: user.id });
-        // Increment total_shakas_received for comment owner
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('total_shakas_received')
-          .eq('user_id', commentUserId)
-          .maybeSingle();
-        if (profileData) {
-          await supabase
-            .from('profiles')
-            .update({ total_shakas_received: (profileData.total_shakas_received || 0) + 1 })
-            .eq('user_id', commentUserId);
-        }
+        await api.forecast.likeComment(commentId);
       }
-
-      const updateComment = (c: ReportComment): ReportComment => {
-        if (c.id === commentId) {
-          return { ...c, is_liked: !isLiked, likes_count: isLiked ? c.likes_count - 1 : c.likes_count + 1 };
-        }
-        if (c.replies) {
-          return { ...c, replies: c.replies.map(updateComment) };
-        }
-        return c;
-      };
-      setComments(comments.map(updateComment));
-    } catch (err) {
-      console.error('handleLikeComment error:', err);
+      fetchComments();
+    } catch (error) {
+      console.error('Error toggling like:', error);
+      toast({ title: 'Failed to update shaka', variant: 'destructive' });
     }
   };
 
@@ -1377,47 +1337,14 @@ const handleSpotClick = (spot: Spot) => {
     
     try {
       if (isKooked) {
-        await supabase.from('forecast_comment_kooks').delete().eq('comment_id', commentId).eq('user_id', user.id);
-        // Decrement total_kooks_received for comment owner
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('total_kooks_received')
-          .eq('user_id', commentUserId)
-          .maybeSingle();
-        if (profileData) {
-          await supabase
-            .from('profiles')
-            .update({ total_kooks_received: Math.max(0, (profileData.total_kooks_received || 0) - 1) })
-            .eq('user_id', commentUserId);
-        }
+        await api.forecast.unkookComment(commentId);
       } else {
-        await supabase.from('forecast_comment_kooks').insert({ comment_id: commentId, user_id: user.id });
-        // Increment total_kooks_received for comment owner
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('total_kooks_received')
-          .eq('user_id', commentUserId)
-          .maybeSingle();
-        if (profileData) {
-          await supabase
-            .from('profiles')
-            .update({ total_kooks_received: (profileData.total_kooks_received || 0) + 1 })
-            .eq('user_id', commentUserId);
-        }
+        await api.forecast.kookComment(commentId);
       }
-
-      const updateComment = (c: ReportComment): ReportComment => {
-        if (c.id === commentId) {
-          return { ...c, is_kooked: !isKooked, kooks_count: isKooked ? c.kooks_count - 1 : c.kooks_count + 1 };
-        }
-        if (c.replies) {
-          return { ...c, replies: c.replies.map(updateComment) };
-        }
-        return c;
-      };
-      setComments(comments.map(updateComment));
-    } catch (err) {
-      console.error('handleKookComment error:', err);
+      fetchComments();
+    } catch (error) {
+      console.error('Error toggling kook:', error);
+      toast({ title: 'Failed to update kook', variant: 'destructive' });
     }
   };
 
@@ -1426,32 +1353,25 @@ const handleSpotClick = (spot: Spot) => {
     if (!user || (user.id !== commentUserId && !isAdmin)) return;
     
     try {
-      await supabase.from('forecast_comments').delete().eq('id', commentId);
-      
-      // Remove from state - check both top-level and replies
-      const removeComment = (commentsList: ReportComment[]): ReportComment[] => {
-        return commentsList
-          .filter(c => c.id !== commentId)
-          .map(c => c.replies ? { ...c, replies: c.replies.filter(r => r.id !== commentId) } : c);
-      };
-      setComments(removeComment(comments));
+      await api.forecast.deleteComment(commentId);
+      fetchComments();
       toast({ title: 'Comment deleted' });
-    } catch (err) {
-      console.error('handleDeleteComment error:', err);
+    } catch (error) {
+      console.error('Error deleting comment:', error);
       toast({ title: 'Failed to delete comment', variant: 'destructive' });
     }
   };
 
   if (loading || !user) return <Layout><div className="flex items-center justify-center min-h-[60vh]"><Waves className="h-8 w-8 animate-pulse text-primary" /></div></Layout>;
 
-  // Consensus metrics from session data
+  // Consensus metrics from session data (changes with time tab)
   const currentRating = spotConditions?.rating[selectedTimeOfDay] || 'unknown';
   const currentSize = spotConditions?.size[selectedTimeOfDay] || '—';
   const currentShape = spotConditions?.shape[selectedTimeOfDay] || '—';
-  // Actual metrics from swell/wind/tide database (empty for now)
-  const currentSwell = spotConditions?.swell[selectedTimeOfDay] || '— — —';
-  const currentWind = spotConditions?.wind[selectedTimeOfDay] || '— kts —';
-  const currentTide = spotConditions?.tide[selectedTimeOfDay] || '— ft';
+  // Live metrics from surf_analytics (static - doesn't change with time tab)
+  const currentSwell = liveData?.swell || '— — —';
+  const currentWind = liveData?.wind || '— kts —';
+  const currentTide = liveData?.tide || '— ft';
   const isTempSpot = selectedSpot?.id.startsWith('temp-');
 
   return (
@@ -1607,7 +1527,7 @@ const handleSpotClick = (spot: Spot) => {
                             <div className="flex items-center gap-4">
                               <div className="flex items-center gap-1.5">
                                 <Ruler className="h-3 w-3 text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground">{size}</span>
+                                <span className="text-xs text-muted-foreground">{size !== '—' ? `${size} ft` : size}</span>
                               </div>
                               <div className="flex items-center gap-1.5">
                                 <Waves className="h-3 w-3 text-muted-foreground" />
@@ -1678,7 +1598,11 @@ const handleSpotClick = (spot: Spot) => {
                         <Star className={`h-4 w-4 ${isSpotFavorited ? 'fill-primary text-primary' : ''}`} />
                       </Button>
                     )}
-                    <Button variant="ghost" size="icon" onClick={() => { setSelectedSpot(null); setAccessedFromFavorites(false); }}>
+                    <Button variant="ghost" size="icon" onClick={() => { 
+                      setSelectedSpot(null); 
+                      setAccessedFromFavorites(false);
+                      // Don't disable crosshairs when closing report card
+                    }}>
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
@@ -1738,42 +1662,51 @@ const handleSpotClick = (spot: Spot) => {
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div>
                     {/* Consensus Metrics Section */}
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1.5 font-medium">User Consensus</p>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="bg-muted/50 rounded-lg py-2 px-3 text-center">
-                          <p className="text-base font-bold text-foreground">{currentSize}</p>
-                          <p className="text-xs text-muted-foreground">Size</p>
-                        </div>
-                        <div className="bg-muted/50 rounded-lg py-2 px-3 text-center">
-                          <p className="text-base font-bold text-foreground capitalize">{currentShape}</p>
-                          <p className="text-xs text-muted-foreground">Shape</p>
-                        </div>
-                        <div className="rounded-lg py-2 px-3 text-center" style={{ backgroundColor: `${RATING_CONFIG[currentRating].color}20` }}>
-                          <p className="text-base font-bold capitalize" style={{ color: RATING_CONFIG[currentRating].color }}>{currentRating}</p>
-                          <p className="text-xs text-muted-foreground">Rating</p>
-                        </div>
+                    <p className="text-xs text-muted-foreground mb-1.5 font-medium">User Consensus</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="bg-muted/50 rounded-lg py-2 px-3 text-center">
+                        <p className="text-base font-bold text-foreground">{currentSize !== '—' ? `${currentSize} ft` : currentSize}</p>
+                        <p className="text-xs text-muted-foreground">Size</p>
+                      </div>
+                      <div className="bg-muted/50 rounded-lg py-2 px-3 text-center">
+                        <p className="text-base font-bold text-foreground capitalize">{currentShape}</p>
+                        <p className="text-xs text-muted-foreground">Shape</p>
+                      </div>
+                      <div className="rounded-lg py-2 px-3 text-center" style={{ backgroundColor: `${RATING_CONFIG[currentRating].color}20` }}>
+                        <p className="text-base font-bold capitalize" style={{ color: RATING_CONFIG[currentRating].color }}>{currentRating}</p>
+                        <p className="text-xs text-muted-foreground">Rating</p>
                       </div>
                     </div>
+                  </div>
+                )}
 
-                    {/* Live Spot Data Section */}
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1.5 font-medium">Live Spot Data</p>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="bg-muted/50 rounded-lg py-2 px-3 text-center">
-                          <p className="text-sm font-bold text-foreground">{currentSwell}</p>
-                          <p className="text-xs text-muted-foreground">Swell</p>
-                        </div>
-                        <div className="bg-muted/50 rounded-lg py-2 px-3 text-center">
-                          <p className="text-sm font-bold text-foreground">{currentWind}</p>
-                          <p className="text-xs text-muted-foreground">Wind</p>
-                        </div>
-                        <div className="bg-muted/50 rounded-lg py-2 px-3 text-center">
-                          <p className="text-sm font-bold text-foreground">{currentTide}</p>
-                          <p className="text-xs text-muted-foreground">Tide</p>
-                        </div>
+                {/* Live Spot Data Section */}
+                {loadingLiveData ? (
+                  <div className="grid grid-cols-3 gap-2">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="bg-muted/50 rounded-lg p-3 text-center animate-pulse">
+                        <div className="h-5 w-12 mx-auto bg-muted rounded mb-1" />
+                        <div className="h-3 w-8 mx-auto bg-muted rounded" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1.5 font-medium">Live Spot Data</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="bg-muted/50 rounded-lg py-2 px-3 text-center">
+                        <p className="text-sm font-bold text-foreground">{currentSwell}</p>
+                        <p className="text-xs text-muted-foreground">Swell</p>
+                      </div>
+                      <div className="bg-muted/50 rounded-lg py-2 px-3 text-center">
+                        <p className="text-sm font-bold text-foreground">{currentWind}</p>
+                        <p className="text-xs text-muted-foreground">Wind</p>
+                      </div>
+                      <div className="bg-muted/50 rounded-lg py-2 px-3 text-center">
+                        <p className="text-sm font-bold text-foreground">{currentTide}</p>
+                        <p className="text-xs text-muted-foreground">Tide</p>
                       </div>
                     </div>
                   </div>
@@ -1846,12 +1779,6 @@ const handleSpotClick = (spot: Spot) => {
                                   <Link to={`/profile/${comment.user_id}`} className="hover:underline">
                                     <span className="font-medium text-sm text-foreground">{comment.profile?.display_name || 'Surfer'}</span>
                                   </Link>
-                                  {(comment.profile?.total_shakas_received || 0) > 0 && (
-                                    <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                                      <img src={shakaIcon} alt="" className="h-3 w-3" />
-                                      {comment.profile?.total_shakas_received}
-                                    </span>
-                                  )}
                                   <span className="text-xs text-muted-foreground">{formatCommentTime(comment.created_at)}</span>
                                 </div>
                                 <p className="text-sm text-foreground mt-1">{comment.content}</p>
@@ -1932,12 +1859,6 @@ const handleSpotClick = (spot: Spot) => {
                                         <Link to={`/profile/${reply.user_id}`} className="hover:underline">
                                           <span className="font-medium text-sm text-foreground">{reply.profile?.display_name || 'Surfer'}</span>
                                         </Link>
-                                        {(reply.profile?.total_shakas_received || 0) > 0 && (
-                                          <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                                            <img src={shakaIcon} alt="" className="h-3 w-3" />
-                                            {reply.profile?.total_shakas_received}
-                                          </span>
-                                        )}
                                         <span className="text-xs text-muted-foreground">{formatCommentTime(reply.created_at)}</span>
                                       </div>
                                       <p className="text-sm text-foreground mt-1">{reply.content}</p>
@@ -2238,7 +2159,7 @@ const handleSpotClick = (spot: Spot) => {
                                 <div className="flex items-center gap-4">
                                   <div className="flex items-center gap-1.5">
                                     <Ruler className="h-3 w-3 text-muted-foreground" />
-                                    <span className="text-xs text-muted-foreground">{size}</span>
+                                    <span className="text-xs text-muted-foreground">{size !== '—' ? `${size} ft` : size}</span>
                                   </div>
                                   <div className="flex items-center gap-1.5">
                                     <Waves className="h-3 w-3 text-muted-foreground" />
@@ -2295,7 +2216,11 @@ const handleSpotClick = (spot: Spot) => {
                           <Star className={`h-4 w-4 ${isSpotFavorited ? 'fill-primary text-primary' : ''}`} />
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" onClick={() => { setSelectedSpot(null); setAccessedFromFavorites(false); }}>
+                      <Button variant="ghost" size="icon" onClick={() => { 
+                        setSelectedSpot(null); 
+                        setAccessedFromFavorites(false);
+                        // Don't disable crosshairs when closing report card
+                      }}>
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
@@ -2356,7 +2281,7 @@ const handleSpotClick = (spot: Spot) => {
                         <p className="text-xs text-muted-foreground mb-1.5 font-medium">User Consensus</p>
                         <div className="grid grid-cols-3 gap-2">
                           <div className="bg-muted/50 rounded-lg py-2 px-3 text-center">
-                            <p className="text-base font-bold text-foreground">{currentSize}</p>
+                            <p className="text-base font-bold text-foreground">{currentSize !== '—' ? `${currentSize} ft` : currentSize}</p>
                             <p className="text-xs text-muted-foreground">Size</p>
                           </div>
                           <div className="bg-muted/50 rounded-lg py-2 px-3 text-center">

@@ -1,73 +1,216 @@
-# Welcome to your Lovable project
+# Salt - Frontend Application
 
-## Project info
+**Surf session logging and social platform for surfers**
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+This is the frontend React application for the Salt platform, a self-hosted surf tracking application.
 
-## How can I edit this code?
+## Architecture
 
-There are several ways of editing your application.
+This application is part of the Salt ecosystem:
+- **Frontend**: React + TypeScript + Vite (this directory)
+- **Backend**: Express.js + TypeScript API (`/api`)
+- **Database**: PostgreSQL (`/postgres`)
+- **Storage**: MinIO S3-compatible object storage (`/helm/minio`)
+- **Infrastructure**: Kubernetes + Ansible (`/helm`, `/ansible`)
 
-**Use Lovable**
+## Technology Stack
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+- **React 18** - UI framework
+- **TypeScript** - Type safety
+- **Vite** - Build tool and dev server
+- **Tailwind CSS** - Styling
+- **shadcn/ui** - Component library
+- **React Router** - Client-side routing
+- **React Query** - Data fetching and caching
+- **React Hook Form** - Form management
+- **Mapbox GL** - Interactive maps
+- **Recharts** - Data visualization
 
-Changes made via Lovable will be committed automatically to this repo.
+## Prerequisites
 
-**Use your preferred IDE**
+- Node.js 18+ and npm
+- Backend API running (see `/api/README.md`)
+- PostgreSQL database (see `/postgres`)
+- MinIO storage (see `/helm/minio`)
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Local Development
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### 1. Install Dependencies
 
-Follow these steps:
+```bash
+cd app
+npm install
+```
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### 2. Configure Environment
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+Copy `.env.example` to `.env.qa` or `.env.prod`:
 
-# Step 3: Install the necessary dependencies.
-npm i
+```bash
+cp .env.example .env.qa
+# Edit with your values
+```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+Required variables:
+```env
+VITE_API_URL=http://localhost:3000/api
+VITE_MAPBOX_TOKEN=your_mapbox_token_here
+```
+
+### 3. Start Development Server
+
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Application will be available at `http://localhost:5173`
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Building for Production
 
-**Use GitHub Codespaces**
+```bash
+# Build optimized production bundle
+npm run build
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+# Preview production build locally
+npm run preview
+```
 
-## What technologies are used for this project?
+Built files will be in `dist/` directory.
 
-This project is built with:
+## Docker Deployment
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Build Container (ARM64 for Raspberry Pi)
 
-## How can I deploy this project?
+```bash
+# From project root
+docker build -f app/salt_app.Dockerfile -t salt-app:latest .
+```
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+### Run Container
 
-## Can I connect a custom domain to my Lovable project?
+```bash
+docker run -p 80:80 \
+  --build-arg VITE_API_URL=http://api.salt.local/api \
+  --build-arg VITE_MAPBOX_TOKEN=your_mapbox_token \
+  salt-app:latest
+```
 
-Yes, you can!
+### Docker Compose
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+```bash
+# From project root - runs entire stack
+docker-compose up
+```
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Features
+
+### Core Features
+- **Session Logging** - Log surf sessions with location, conditions, ratings
+- **Quiver Management** - Track your surfboards
+- **Social Feed** - View and interact with other surfers' sessions
+- **Spot Reports** - Real-time surf conditions and forecasts
+- **Maps** - Interactive map of surf spots and sessions
+- **Profile & Stats** - User profiles with session statistics
+- **Connections** - Follow other surfers
+
+### Media Features
+- **Photo/Video Upload** - Attach media to sessions
+- **Avatar Management** - Custom profile pictures
+- **Board Photos** - Visual quiver management
+
+### Analytics
+- **Session Statistics** - Track your surfing progress
+- **Streak Tracking** - Monitor consistency
+- **Activity Charts** - Visualize your surf data
+
+## Project Structure
+
+```
+app/
+├── src/
+│   ├── components/     # Reusable UI components
+│   ├── contexts/       # React contexts (Auth, Theme)
+│   ├── hooks/          # Custom React hooks
+│   ├── lib/            # Utility functions and API client
+│   ├── pages/          # Route components
+│   └── assets/         # Images and icons
+├── public/             # Static assets
+├── nginx.conf          # Nginx configuration for production
+├── salt_app.Dockerfile  # Docker build configuration
+└── package.json        # Dependencies and scripts
+```
+
+## Status
+
+**Completed:**
+- All UI components and pages
+- JWT authentication via Salt API
+- File uploads via MinIO
+- Session management
+- Social features (follows, likes, comments)
+- Quiver management
+- Maps and spot reports
+
+**Pending Backend Endpoints:**
+- Forecast comments (daily discussions)
+- Favorite spots management
+- Saved locations
+- Admin user management
+- Top surfers leaderboard
+
+## API Integration
+
+The frontend communicates with the Salt backend API:
+
+```typescript
+// Example API call
+import { api } from '@/lib/api';
+
+const sessions = await api.get('/sessions/public');
+const newSession = await api.post('/sessions', sessionData);
+```
+
+See `/api/README.md` for complete API documentation.
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|----------|
+| `VITE_API_URL` | Backend API URL | http://localhost:3000/api |
+| `VITE_MAPBOX_TOKEN` | Mapbox API token for maps | (required) |
+
+## Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run build:dev` - Build with development mode
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
+
+## Deployment
+
+### Kubernetes
+
+See `/helm/README.md` for Helm chart deployment documentation.
+
+### Nginx Configuration
+
+The production build uses Nginx to serve static files with:
+- Gzip compression
+- Browser caching for assets
+- SPA routing support
+- Security headers
+
+See `nginx.conf` for configuration details.
+
+## Contributing
+
+See `/CONTRIBUTING.md` for contribution guidelines.
+
+## License
+
+See project root for license information.
+
+## Support
+
+For issues and questions, please use the GitHub issue tracker.

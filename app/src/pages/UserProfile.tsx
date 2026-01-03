@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Waves, User, MapPin, Calendar, UserPlus, UserMinus, Users, Play, Image as ImageIcon, ChevronRight, Shield, Flame } from 'lucide-react';
 import SurfboardIcon from '@/components/icons/SurfboardIcon';
@@ -57,6 +57,14 @@ interface SessionData {
   kooks_count: number;
   is_kooked: boolean;
   board?: { id: string; name: string; brand: string | null; photo_url: string | null } | null;
+  swell_signature?: {
+    swell_height: string | null;
+    swell_period: number | null;
+    swell_direction: string | null;
+    wind_speed: number | null;
+    wind_direction: string | null;
+    tide_height: string | null;
+  } | null;
 }
 
 interface MediaItem {
@@ -123,64 +131,57 @@ const UserProfile = () => {
     const fetchProfile = async () => {
       if (!userId || !user) return;
 
-      const [profileRes, followersRes, followingRes, isFollowingRes, adminRoleRes] = await Promise.all([
-        supabase.from('profiles').select('*').eq('user_id', userId).maybeSingle(),
-        supabase.from('follows').select('id', { count: 'exact' }).eq('following_id', userId),
-        supabase.from('follows').select('id', { count: 'exact' }).eq('follower_id', userId),
-        supabase.from('follows').select('id').eq('follower_id', user.id).eq('following_id', userId).maybeSingle(),
-        supabase.from('user_roles').select('id').eq('user_id', userId).eq('role', 'admin').maybeSingle(),
-      ]);
+      try {
+        // Fetch profile and follow data - fetch independently to avoid one failure breaking everything
+        const [profileData, followData, boardsData] = await Promise.all([
+          api.profiles.getByUserId(userId),
+          api.social.getFollowStats(userId, user.id),
+          api.boards.getByUser(userId),
+        ]);
 
-      if (profileRes.data) {
-        setProfile(profileRes.data);
-      }
-      setFollowersCount(followersRes.count || 0);
-      setFollowingCount(followingRes.count || 0);
-      setIsFollowing(!!isFollowingRes.data);
-      setIsProfileAdmin(!!adminRoleRes.data);
-
-      const { data: allSessions } = await supabase
-        .from('sessions')
-        .select('id, location, wave_count, barrel_count, air_count')
-        .eq('user_id', userId)
-        .eq('is_public', true);
-
-      if (allSessions) {
-        const totalWaves = allSessions.reduce((sum, s) => sum + (s.wave_count || 0), 0);
-        const totalBarrels = allSessions.reduce((sum, s) => sum + (s.barrel_count || 0), 0);
-        const totalAirs = allSessions.reduce((sum, s) => sum + (s.air_count || 0), 0);
-        const locationCounts: Record<string, number> = {};
-        allSessions.forEach(s => {
-          locationCounts[s.location] = (locationCounts[s.location] || 0) + 1;
-        });
-        const topSpot = Object.entries(locationCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
-        setStats({ totalSessions: allSessions.length, totalWaves, totalBarrels, totalAirs, topSpot });
-
-        if (allSessions.length > 0) {
-          const sessionIds = allSessions.map(s => s.id);
-          const { data: mediaData } = await supabase
-            .from('session_media')
-            .select('*')
-            .in('session_id', sessionIds)
-            .order('created_at', { ascending: false })
-            .limit(20);
-
-          if (mediaData) {
-            setAllMedia(mediaData);
-            setRecentMedia(mediaData.slice(0, 4));
-          }
+        if (profileData) {
+          setProfile(profileData);
         }
-      }
+        if (followData) {
+          setFollowersCount(followData.followers_count || 0);
+          setFollowingCount(followData.following_count || 0);
+          setIsFollowing(followData.is_following || false);
+        }
+        
+        // Check admin status separately to not break profile loading if it fails
+        try {
+          const adminCheck = await api.auth.checkAdmin(userId);
+          setIsProfileAdmin(adminCheck?.isAdmin || false);
+        } catch (error) {
+          console.error('Error checking admin status:', error);
+          setIsProfileAdmin(false);
+        }
 
-      // Fetch user's boards (public quiver)
-      const { data: boardsData } = await supabase
-        .from('boards')
-        .select('id, name, brand, model, board_type, length_feet, length_inches, photo_url')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+        // Fetch sessions for stats
+        const allSessions = await api.sessions.getByUser(userId, 1000, 0, user.id);
+        const publicSessions = allSessions?.filter((s: any) => s.is_public) || [];
 
-      if (boardsData) {
-        setUserBoards(boardsData);
+        if (publicSessions.length > 0) {
+          const totalWaves = publicSessions.reduce((sum: number, s: any) => sum + (s.wave_count || 0), 0);
+          const totalBarrels = publicSessions.reduce((sum: number, s: any) => sum + (s.barrel_count || 0), 0);
+          const totalAirs = publicSessions.reduce((sum: number, s: any) => sum + (s.air_count || 0), 0);
+          const locationCounts: Record<string, number> = {};
+          publicSessions.forEach((s: any) => {
+            locationCounts[s.location] = (locationCounts[s.location] || 0) + 1;
+          });
+          const topSpot = Object.entries(locationCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+          setStats({ totalSessions: publicSessions.length, totalWaves, totalBarrels, totalAirs, topSpot });
+
+          // TODO: Add media endpoint
+          setAllMedia([]);
+          setRecentMedia([]);
+        }
+
+        if (boardsData) {
+          setUserBoards(boardsData);
+        }
+      } catch (error) {
+        console.error('Error fetching profile:', error);
       }
 
       setLoadingProfile(false);
@@ -193,35 +194,22 @@ const UserProfile = () => {
     if (!userId || !user) return;
     setLoadingSessions(true);
 
-    const { data, error } = await supabase
-      .from('sessions')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('is_public', true)
-      .order('session_date', { ascending: false })
-      .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1);
+    try {
+      // Fetch all sessions with current user context for like/kook status
+      const data = await api.sessions.getByUser(userId, 1000, 0, user.id);
+      const publicData = data?.filter((s: any) => s.is_public) || [];
+      const paginatedData = publicData.slice(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE);
 
-    if (!error && data) {
-      const enrichedSessions = await Promise.all(data.map(async (session) => {
-        const [mediaRes, likesRes, commentsRes, myLikeRes, kooksRes, myKookRes, boardRes] = await Promise.all([
-          supabase.from('session_media').select('url, media_type').eq('session_id', session.id),
-          supabase.from('session_likes').select('id', { count: 'exact' }).eq('session_id', session.id),
-          supabase.from('session_comments').select('id', { count: 'exact' }).eq('session_id', session.id),
-          supabase.from('session_likes').select('id').eq('session_id', session.id).eq('user_id', user.id).maybeSingle(),
-          supabase.from('session_kooks').select('id', { count: 'exact' }).eq('session_id', session.id),
-          supabase.from('session_kooks').select('id').eq('session_id', session.id).eq('user_id', user.id).maybeSingle(),
-          session.board_id ? supabase.from('boards').select('id, name, brand, photo_url').eq('id', session.board_id).maybeSingle() : Promise.resolve({ data: null }),
-        ]);
-        return {
-          ...session,
-          media: mediaRes.data || [],
-          likes_count: likesRes.count || 0,
-          comments_count: commentsRes.count || 0,
-          is_liked: !!myLikeRes.data,
-          kooks_count: kooksRes.count || 0,
-          is_kooked: !!myKookRes.data,
-          board: boardRes.data,
-        };
+      // Map sessions to expected format (backend includes board and swell_signature)
+      const enrichedSessions = paginatedData.map((session: any) => ({
+        ...session,
+        likes_count: session.like_count || 0,
+        comments_count: session.comment_count || 0,
+        is_liked: session.is_liked || false,
+        kooks_count: session.kooks_count || 0,
+        is_kooked: session.is_kooked || false,
+        board: session.board || null,
+        swell_signature: session.swell_signature || null,
       }));
 
       if (pageNum === 0) {
@@ -229,7 +217,9 @@ const UserProfile = () => {
       } else {
         setSessions(prev => [...prev, ...enrichedSessions]);
       }
-      setHasMore(data.length === PAGE_SIZE);
+      setHasMore(paginatedData.length === PAGE_SIZE);
+    } catch (error) {
+      console.error('Error fetching sessions:', error);
     }
     setLoadingSessions(false);
   }, [userId, user]);
@@ -253,36 +243,16 @@ const UserProfile = () => {
     // Can't like own session
     if (user.id === userId) return;
     
-    if (isLiked) {
-      await supabase.from('session_likes').delete().eq('session_id', sessionId).eq('user_id', user.id);
-      // Decrement total_shakas_received for session owner
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('total_shakas_received')
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (profileData) {
-        await supabase
-          .from('profiles')
-          .update({ total_shakas_received: Math.max(0, (profileData.total_shakas_received || 0) - 1) })
-          .eq('user_id', userId);
+    try {
+      if (isLiked) {
+        await api.social.unlikeSession(sessionId, user.id);
+      } else {
+        await api.social.likeSession(sessionId, user.id);
       }
-    } else {
-      await supabase.from('session_likes').insert({ session_id: sessionId, user_id: user.id });
-      // Increment total_shakas_received for session owner
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('total_shakas_received')
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (profileData) {
-        await supabase
-          .from('profiles')
-          .update({ total_shakas_received: (profileData.total_shakas_received || 0) + 1 })
-          .eq('user_id', userId);
-      }
+      setSessions(sessions.map(s => s.id === sessionId ? { ...s, is_liked: !isLiked, likes_count: isLiked ? s.likes_count - 1 : s.likes_count + 1 } : s));
+    } catch (error) {
+      console.error('Error toggling like:', error);
     }
-    setSessions(sessions.map(s => s.id === sessionId ? { ...s, is_liked: !isLiked, likes_count: isLiked ? s.likes_count - 1 : s.likes_count + 1 } : s));
   };
 
   const handleKook = async (sessionId: string, isKooked: boolean) => {
@@ -290,56 +260,50 @@ const UserProfile = () => {
     // Can't kook own session
     if (user.id === userId) return;
     
-    if (isKooked) {
-      await supabase.from('session_kooks').delete().eq('session_id', sessionId).eq('user_id', user.id);
-      // Decrement total_kooks_received for session owner
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('total_kooks_received')
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (profileData) {
-        await supabase
-          .from('profiles')
-          .update({ total_kooks_received: Math.max(0, (profileData.total_kooks_received || 0) - 1) })
-          .eq('user_id', userId);
+    try {
+      if (isKooked) {
+        await api.social.unkookSession(sessionId, user.id);
+      } else {
+        await api.social.kookSession(sessionId, user.id);
       }
-    } else {
-      await supabase.from('session_kooks').insert({ session_id: sessionId, user_id: user.id });
-      // Increment total_kooks_received for session owner
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('total_kooks_received')
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (profileData) {
-        await supabase
-          .from('profiles')
-          .update({ total_kooks_received: (profileData.total_kooks_received || 0) + 1 })
-          .eq('user_id', userId);
-      }
+      setSessions(sessions.map(s => s.id === sessionId ? { ...s, is_kooked: !isKooked, kooks_count: isKooked ? s.kooks_count - 1 : s.kooks_count + 1 } : s));
+    } catch (error) {
+      console.error('Error toggling kook:', error);
     }
-    setSessions(sessions.map(s => s.id === sessionId ? { ...s, is_kooked: !isKooked, kooks_count: isKooked ? s.kooks_count - 1 : s.kooks_count + 1 } : s));
   };
 
   const handleCommentAdded = (sessionId: string) => {
     setSessions(sessions.map(s => s.id === sessionId ? { ...s, comments_count: s.comments_count + 1 } : s));
   };
 
+  const handleCommentDeleted = (sessionId: string) => {
+    setSessions(sessions.map(s => s.id === sessionId ? { ...s, comments_count: Math.max(0, s.comments_count - 1) } : s));
+  };
+
   const handleFollow = async () => {
     if (!user || !userId) return;
-    await supabase.from('follows').insert({ follower_id: user.id, following_id: userId });
-    setIsFollowing(true);
-    setFollowersCount(prev => prev + 1);
-    toast({ title: 'Now following!' });
+    try {
+      await api.social.follow(user.id, userId);
+      setIsFollowing(true);
+      setFollowersCount(prev => prev + 1);
+      toast({ title: 'Now following!' });
+    } catch (error) {
+      console.error('Error following:', error);
+      toast({ title: 'Failed to follow', variant: 'destructive' });
+    }
   };
 
   const handleUnfollow = async () => {
     if (!user || !userId) return;
-    await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', userId);
-    setIsFollowing(false);
-    setFollowersCount(prev => prev - 1);
-    toast({ title: 'Unfollowed' });
+    try {
+      await api.social.unfollow(user.id, userId);
+      setIsFollowing(false);
+      setFollowersCount(prev => prev - 1);
+      toast({ title: 'Unfollowed' });
+    } catch (error) {
+      console.error('Error unfollowing:', error);
+      toast({ title: 'Failed to unfollow', variant: 'destructive' });
+    }
   };
 
   const openLightbox = (index: number) => {
@@ -435,6 +399,14 @@ const UserProfile = () => {
               </Button>
             </div>
 
+            {/* Bio */}
+            {profile.bio && (
+              <div>
+                <h3 className="font-semibold text-foreground mb-2">About</h3>
+                <p className="text-muted-foreground">{profile.bio}</p>
+              </div>
+            )}
+
             {/* Discussion Engagement Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-4 py-3">
@@ -470,59 +442,6 @@ const UserProfile = () => {
               </div>
             </div>
 
-            {/* Quiver */}
-            {userBoards.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-foreground flex items-center gap-2">
-                    <SurfboardIcon className="h-4 w-4" />
-                    Quiver
-                  </h3>
-                  {userBoards.length > 3 && (
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => setShowAllBoards(!showAllBoards)}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      {showAllBoards ? 'Show Less' : `View All (${userBoards.length})`}
-                      <ChevronRight className={`h-4 w-4 ml-1 transition-transform ${showAllBoards ? 'rotate-90' : ''}`} />
-                    </Button>
-                  )}
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {(showAllBoards ? userBoards : userBoards.slice(0, 3)).map((board) => (
-                    <div 
-                      key={board.id}
-                      className="bg-muted/50 rounded-lg p-3 text-center group"
-                    >
-                      {board.photo_url ? (
-                        <div className="relative w-full h-16 mb-2 rounded-md overflow-hidden bg-muted">
-                          <img 
-                            src={board.photo_url} 
-                            alt={board.name} 
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-full h-16 mb-2 rounded-md bg-muted flex items-center justify-center">
-                          <SurfboardIcon className="h-8 w-8 text-muted-foreground/50" />
-                        </div>
-                      )}
-                      <p className="text-xs font-medium text-foreground truncate">
-                        {board.brand ? `${board.brand} ` : ''}{board.name}
-                      </p>
-                      {board.length_feet && (
-                        <p className="text-xs text-muted-foreground">
-                          {board.length_feet}'{board.length_inches || 0}"
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Statistics */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               <div className="bg-muted/50 rounded-lg p-4 text-center">
@@ -548,21 +467,24 @@ const UserProfile = () => {
             </div>
 
 
-            {/* Years Surfing */}
-            {profile.years_surfing && (
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">
-                  Surfing for {profile.years_surfing} year{profile.years_surfing !== 1 ? 's' : ''}
-                </span>
-              </div>
-            )}
-
-            {/* Bio */}
-            {profile.bio && (
+            {/* Quiver */}
+            {userBoards.length > 0 && (
               <div>
-                <h3 className="font-semibold text-foreground mb-2">About</h3>
-                <p className="text-muted-foreground">{profile.bio}</p>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    <SurfboardIcon className="h-4 w-4" />
+                    Quiver ({userBoards.length})
+                  </h3>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => navigate(`/quiver/${userId}`)}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    View Quiver
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -643,6 +565,7 @@ const UserProfile = () => {
                   onLike={handleLike}
                   onKook={handleKook}
                   onCommentAdded={handleCommentAdded}
+                  onCommentDeleted={handleCommentDeleted}
                 />
               ))}
             </div>

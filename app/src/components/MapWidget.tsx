@@ -324,7 +324,9 @@ const MapWidget: React.FC<MapWidgetProps> = ({
       mapboxResults.sort((a, b) => (b.relevance || 0) - (a.relevance || 0));
 
       // Combine: saved locations first, then sorted mapbox results
-      const combined = [...matchingSaved, ...mapboxResults].slice(0, 5);
+      // Show all saved matches, then fill remaining slots with mapbox results (max 8 total)
+      const maxMapboxResults = Math.max(0, 8 - matchingSaved.length);
+      const combined = [...matchingSaved, ...mapboxResults.slice(0, maxMapboxResults)];
       setSearchResults(combined);
       setShowResults(true);
     } catch (error) {
