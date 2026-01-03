@@ -70,13 +70,8 @@ workflows:
         memory: "256Mi"
 
 # ==============================================================================
-# MINIO CONFIGURATION
+# ARTIFACT STORAGE
 # ==============================================================================
-minio:
-  enabled: true
-  
-  ports:
-    nodeApi: 31000
-  
-  buckets:
-    - argo-logs
+# MinIO is deployed as a separate chart in /helm/minio (storage namespace)
+# Argo Workflows uses the argo-logs bucket for artifact storage
+# MinIO endpoint: master:31000

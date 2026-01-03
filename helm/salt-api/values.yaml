@@ -1,0 +1,217 @@
+# ==============================================================================
+# GLOBAL CONFIGURATION
+# ==============================================================================
+global:
+  environment: prod
+  clusterDomain: cluster.local
+  imagePullSecrets: []
+
+# ==============================================================================
+# METADATA
+# ==============================================================================
+metadata:
+  namespace: salt
+  labels:
+    app.kubernetes.io/name: salt-api
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: salt
+    app.kubernetes.io/managed-by: Helm
+  annotations: {}
+
+# ==============================================================================
+# IMAGE CONFIGURATION
+# ==============================================================================
+image:
+  repository: surflocally/salt-api
+  tag: latest
+  pullPolicy: Always
+  pullSecrets: []
+
+# ==============================================================================
+# DEPLOYMENT CONFIGURATION
+# ==============================================================================
+deployment:
+  # Single replica for small cluster
+  replicaCount: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  podDisruptionBudget:
+    enabled: false
+  restartPolicy: Always
+
+# ==============================================================================
+# RESOURCE MANAGEMENT
+# ==============================================================================
+# Conservative limits for Raspberry Pi 4 (4GB RAM)
+# Increased requests to prevent premature HPA scaling
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+# ==============================================================================
+# NETWORKING
+# ==============================================================================
+service:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+  annotations: {}
+  sessionAffinity: None
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  tls: []
+
+# ==============================================================================
+# SECURITY
+# ==============================================================================
+securityContext:
+  pod:
+    runAsNonRoot: false
+    fsGroup: 1000
+  container:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    runAsNonRoot: false
+
+rbac:
+  enabled: true
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+
+# ==============================================================================
+# CONFIGURATION
+# ==============================================================================
+config:
+  # Database configuration
+  database:
+    host: postgres
+    port: 5432
+    name: salt_app
+    user: salt_app
+    maxConnections: 20
+  
+  # MinIO configuration (K8s service for internal cluster access)
+  minio:
+    endpoint: minio.storage.svc.cluster.local
+    port: 9000
+    useSSL: false
+    region: us-west-1
+    accessKey: admin
+    buckets:
+      sessionMedia: session-media
+      avatars: avatars
+      boardPhotos: board-photos
+  
+  # JWT configuration
+  jwt:
+    expiresIn: 7d
+  
+  # CORS configuration
+  cors:
+    origin: "*"
+  
+  # Rate limiting
+  rateLimit:
+    windowMs: 900000
+    maxRequests: 100
+  
+  # File upload limits
+  upload:
+    maxFileSize: 10485760
+    maxFilesPerUpload: 5
+  
+  # Logging
+  logging:
+    level: info
+
+# Secrets (should be provided via --set or external secret management)
+secrets:
+  # Database password - REQUIRED
+  databasePassword: ""
+  # MinIO secret key - REQUIRED  
+  minioSecretKey: ""
+  # JWT secret - REQUIRED (generate with: openssl rand -base64 32)
+  jwtSecret: ""
+
+# ==============================================================================
+# HEALTH CHECKS
+# ==============================================================================
+healthChecks:
+  liveness:
+    enabled: true
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    successThreshold: 1
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    successThreshold: 1
+    failureThreshold: 3
+
+# ==============================================================================
+# SCHEDULING
+# ==============================================================================
+scheduling:
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+
+# ==============================================================================
+# MONITORING
+# ==============================================================================
+monitoring:
+  metrics:
+    enabled: false
+    port: 9090
+    path: /metrics
+    serviceMonitor:
+      enabled: false
+      interval: 30s
+  logging:
+    level: info
+    format: json
+
+# ==============================================================================
+# AUTOSCALING
+# ==============================================================================
+# Horizontal Pod Autoscaler for API workload
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  # API is CPU-intensive (database queries, business logic)
+  # Scale up at 70% CPU to handle traffic spikes proactively
+  targetCPUUtilizationPercentage: 70
+  # Memory-based scaling at 75% to prevent OOM under load
+  targetMemoryUtilizationPercentage: 75
+  # Wait 5 minutes before scaling down to avoid thrashing
+  scaleDownStabilizationSeconds: 300
+  # Scale up immediately when needed
+  scaleUpStabilizationSeconds: 0

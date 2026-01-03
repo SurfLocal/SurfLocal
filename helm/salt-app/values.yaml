@@ -4,58 +4,56 @@
 global:
   environment: prod
   clusterDomain: cluster.local
+  imagePullSecrets: []
 
 # ==============================================================================
 # METADATA
 # ==============================================================================
 metadata:
-  namespace: argo
+  namespace: salt
   labels:
-    app.kubernetes.io/name: minio
-    app.kubernetes.io/component: storage
-    app.kubernetes.io/part-of: argo-workflows
+    app.kubernetes.io/name: salt-app
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: salt
+    app.kubernetes.io/managed-by: Helm
   annotations: {}
 
 # ==============================================================================
 # IMAGE CONFIGURATION
 # ==============================================================================
 image:
-  repository: minio/minio
+  repository: surflocally/salt-app
   tag: latest
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
   pullSecrets: []
 
 # ==============================================================================
 # DEPLOYMENT CONFIGURATION
 # ==============================================================================
 deployment:
+  # Single replica for small cluster
   replicaCount: 1
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  podDisruptionBudget:
+    enabled: false
   restartPolicy: Always
-  volumeName: minio-storage
-  dataPath: /data
-  args:
-    - server
-    - /data
-    - --console-address
-    - ":9001"
-  initContainer:
-    enabled: true
-    image: busybox:latest
-    command: "chown -R 1000:1000 /data && chmod -R u+rwX /data"
-    runAsUser: 0
 
 # ==============================================================================
 # RESOURCE MANAGEMENT
 # ==============================================================================
+# Conservative limits for Raspberry Pi 4 (4GB RAM)
+# Nginx is lightweight, so we can use smaller limits
 resources:
   limits:
-    cpu: "1000m"
-    memory: "2Gi"
+    cpu: 200m
+    memory: 128Mi
   requests:
-    cpu: "250m"
-    memory: "512Mi"
+    cpu: 50m
+    memory: 64Mi
 
 # ==============================================================================
 # NETWORKING
@@ -63,16 +61,11 @@ resources:
 service:
   type: NodePort
   ports:
-    - name: api
-      port: 9000
-      targetPort: 9000
-      nodePort: 31000
+    - name: http
+      port: 80
+      targetPort: 80
       protocol: TCP
-    - name: console
-      port: 9001
-      targetPort: 9001
-      nodePort: 31001
-      protocol: TCP
+      nodePort: 30080
   annotations: {}
   sessionAffinity: None
 
@@ -84,71 +77,23 @@ ingress:
   tls: []
 
 # ==============================================================================
-# STORAGE
-# ==============================================================================
-persistence:
-  enabled: true
-  storageClass: "minio-storage"
-  accessModes:
-    - ReadWriteOnce
-  size: 100Gi
-  existingClaim: ""
-  reclaimPolicy: Retain
-  hostPathType: DirectoryOrCreate
-  
-  persistentVolume:
-    enabled: true
-    hostPath: "/mnt/ssd/minio-data"
-    labels:
-      type: local
-    nodeAffinity:
-      required:
-        nodeSelectorTerms:
-          - matchExpressions:
-              - key: node-role.kubernetes.io/control-plane
-                operator: In
-                values:
-                  - "true"
-
-# ==============================================================================
 # SECURITY
 # ==============================================================================
 securityContext:
   pod:
-    runAsUser: 1000
-    runAsGroup: 1000
-    fsGroup: 1000
+    runAsNonRoot: false
+    fsGroup: 101
   container:
     allowPrivilegeEscalation: false
-    runAsUser: 1000
-    capabilities:
-      drop:
-        - ALL
+    readOnlyRootFilesystem: false
+    runAsNonRoot: false
 
 rbac:
-  enabled: false
+  enabled: true
   serviceAccount:
-    create: false
+    create: true
     name: ""
     annotations: {}
-
-credentials:
-  accessKey: admin
-  secretKey: fidelio!
-
-# ==============================================================================
-# CONFIGURATION
-# ==============================================================================
-config:
-  region: us-west-1
-  browser: "on"
-  domain: ""
-  
-  # Bucket configurations
-  buckets:
-    - name: argo-logs
-      policy: none
-      purge: false
 
 # ==============================================================================
 # HEALTH CHECKS
@@ -157,22 +102,21 @@ healthChecks:
   liveness:
     enabled: true
     httpGet:
-      path: /minio/health/live
-      port: 9000
-    initialDelaySeconds: 30
-    periodSeconds: 10
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 30
     timeoutSeconds: 5
     successThreshold: 1
     failureThreshold: 3
-  
   readiness:
     enabled: true
     httpGet:
-      path: /minio/health/ready
-      port: 9000
+      path: /health
+      port: http
     initialDelaySeconds: 5
-    periodSeconds: 5
-    timeoutSeconds: 3
+    periodSeconds: 10
+    timeoutSeconds: 5
     successThreshold: 1
     failureThreshold: 3
 
@@ -180,8 +124,7 @@ healthChecks:
 # SCHEDULING
 # ==============================================================================
 scheduling:
-  nodeSelector:
-    node-role.kubernetes.io/control-plane: "true"
+  nodeSelector: {}
   tolerations: []
   affinity: {}
   priorityClassName: ""
@@ -192,8 +135,29 @@ scheduling:
 monitoring:
   metrics:
     enabled: false
-    port: 9000
-    path: /minio/v2/metrics/cluster
+    port: 9090
+    path: /metrics
+    serviceMonitor:
+      enabled: false
+      interval: 30s
   logging:
     level: info
     format: json
+
+# ==============================================================================
+# AUTOSCALING
+# ==============================================================================
+# Horizontal Pod Autoscaler for frontend app (nginx serving static files)
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  # Nginx is lightweight, can handle more load before scaling
+  # Scale up at 80% CPU utilization
+  targetCPUUtilizationPercentage: 80
+  # Memory is typically stable for static serving, scale at 80%
+  targetMemoryUtilizationPercentage: 80
+  # Wait 5 minutes before scaling down to avoid thrashing
+  scaleDownStabilizationSeconds: 300
+  # Scale up immediately when needed
+  scaleUpStabilizationSeconds: 0

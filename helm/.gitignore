@@ -1,0 +1,7 @@
+# Helm
+*.tgz
+charts/
+Chart.lock
+
+# Temporary files
+*.tmp

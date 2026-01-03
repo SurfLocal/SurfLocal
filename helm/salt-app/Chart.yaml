@@ -1,0 +1,17 @@
+apiVersion: v2
+name: salt-app
+description: Salt frontend application for surf session tracking
+version: 0.1.0
+appVersion: "1.0.0"
+type: application
+keywords:
+  - salt
+  - frontend
+  - react
+  - vite
+  - nginx
+maintainers:
+  - name: Rob Ronayne
+home: https://github.com/robronayne/Salt
+sources:
+  - https://github.com/robronayne/Salt

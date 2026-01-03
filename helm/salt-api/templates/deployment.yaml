@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "salt-api.fullname" . }}
+  namespace: {{ .Values.metadata.namespace }}
+  labels:
+    {{- include "salt-api.labels" . | nindent 4 }}
+  {{- with .Values.metadata.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.deployment.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "salt-api.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: {{ .Values.deployment.strategy.type }}
+    {{- if eq .Values.deployment.strategy.type "RollingUpdate" }}
+    rollingUpdate:
+      maxSurge: {{ .Values.deployment.strategy.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.deployment.strategy.rollingUpdate.maxUnavailable }}
+    {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "salt-api.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "salt-api.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.securityContext.pod | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext.container | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: {{ .Values.global.environment | quote }}
+            - name: PORT
+              value: "3000"
+            # Database configuration
+            - name: DATABASE_HOST
+              value: {{ .Values.config.database.host | quote }}
+            - name: DATABASE_PORT
+              value: {{ .Values.config.database.port | quote }}
+            - name: DATABASE_NAME
+              value: {{ .Values.config.database.name | quote }}
+            - name: DATABASE_USER
+              value: {{ .Values.config.database.user | quote }}
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "salt-api.fullname" . }}-secrets
+                  key: database-password
+            - name: DATABASE_MAX_CONNECTIONS
+              value: {{ .Values.config.database.maxConnections | quote }}
+            # MinIO configuration
+            - name: MINIO_ENDPOINT
+              value: {{ .Values.config.minio.endpoint | quote }}
+            - name: MINIO_PORT
+              value: {{ .Values.config.minio.port | quote }}
+            - name: MINIO_USE_SSL
+              value: {{ .Values.config.minio.useSSL | quote }}
+            - name: MINIO_REGION
+              value: {{ .Values.config.minio.region | quote }}
+            - name: MINIO_ACCESS_KEY
+              value: {{ .Values.config.minio.accessKey | quote }}
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "salt-api.fullname" . }}-secrets
+                  key: minio-secret-key
+            # Bucket configuration
+            - name: BUCKET_SESSION_MEDIA
+              value: {{ .Values.config.minio.buckets.sessionMedia | quote }}
+            - name: BUCKET_AVATARS
+              value: {{ .Values.config.minio.buckets.avatars | quote }}
+            - name: BUCKET_BOARD_PHOTOS
+              value: {{ .Values.config.minio.buckets.boardPhotos | quote }}
+            # JWT configuration
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "salt-api.fullname" . }}-secrets
+                  key: jwt-secret
+            - name: JWT_EXPIRES_IN
+              value: {{ .Values.config.jwt.expiresIn | quote }}
+            # CORS configuration
+            - name: CORS_ORIGIN
+              value: {{ .Values.config.cors.origin | quote }}
+            # Rate limiting
+            - name: RATE_LIMIT_WINDOW_MS
+              value: {{ .Values.config.rateLimit.windowMs | quote }}
+            - name: RATE_LIMIT_MAX_REQUESTS
+              value: {{ .Values.config.rateLimit.maxRequests | quote }}
+            # File upload
+            - name: MAX_FILE_SIZE
+              value: {{ .Values.config.upload.maxFileSize | quote }}
+            - name: MAX_FILES_PER_UPLOAD
+              value: {{ .Values.config.upload.maxFilesPerUpload | quote }}
+            # Logging
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logging.level | quote }}
+          {{- if .Values.healthChecks.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.healthChecks.liveness.httpGet.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.healthChecks.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthChecks.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthChecks.liveness.timeoutSeconds }}
+            successThreshold: {{ .Values.healthChecks.liveness.successThreshold }}
+            failureThreshold: {{ .Values.healthChecks.liveness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.healthChecks.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.healthChecks.readiness.httpGet.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.healthChecks.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthChecks.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthChecks.readiness.timeoutSeconds }}
+            successThreshold: {{ .Values.healthChecks.readiness.successThreshold }}
+            failureThreshold: {{ .Values.healthChecks.readiness.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.scheduling.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduling.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduling.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
