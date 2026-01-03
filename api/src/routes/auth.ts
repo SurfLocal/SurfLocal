@@ -235,7 +235,7 @@ router.get('/check-admin/:user_id', asyncHandler(async (req, res) => {
     [user_id]
   );
   
-  res.json({ isAdmin: result.rows[0].is_admin });
+  res.json({ is_admin: result.rows[0].is_admin });
 }));
 
 export default router;

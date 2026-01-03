@@ -79,6 +79,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
 
   const allowedFields = [
     'display_name', 'bio', 'avatar_url', 'home_break', 'years_surfing',
+    'longest_streak', 'longest_streak_start',
   ];
 
   const setClause = Object.keys(updates)

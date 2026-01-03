@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Waves, ChevronRight, ChevronLeft, X, Image as ImageIcon, Flame } from 'lucide-react';
@@ -499,6 +499,10 @@ const Sessions = () => {
       {/* Lightbox Dialog */}
       <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
         <DialogContent className="max-w-5xl p-0 bg-black/95 border-none [&>button.rounded-sm]:hidden">
+          <DialogTitle className="sr-only">Session Media Viewer</DialogTitle>
+          <DialogDescription className="sr-only">
+            View session photos and videos in full screen
+          </DialogDescription>
           <button
             onClick={() => setLightboxOpen(false)}
             className="absolute top-4 right-4 z-50 bg-white/10 hover:bg-white/20 rounded-full p-2 text-white transition-colors"

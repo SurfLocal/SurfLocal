@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 
@@ -39,6 +39,10 @@ const ImageLightbox = ({ images, initialIndex, open, onClose }: ImageLightboxPro
         className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-none [&>button.rounded-sm]:hidden" 
         onKeyDown={handleKeyDown}
       >
+        <DialogTitle className="sr-only">Image Viewer</DialogTitle>
+        <DialogDescription className="sr-only">
+          View full size image
+        </DialogDescription>
         <div className="relative flex items-center justify-center w-full h-[90vh]">
           {/* Close button */}
           <Button
