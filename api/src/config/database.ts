@@ -1,4 +1,8 @@
 import { Pool, PoolConfig } from 'pg';
+import * as dns from 'dns';
+
+// Force IPv4 resolution to avoid IPv6 connectivity issues
+dns.setDefaultResultOrder('ipv4first');
 
 const poolConfig: PoolConfig = {
   host: process.env.DATABASE_HOST || 'localhost',
