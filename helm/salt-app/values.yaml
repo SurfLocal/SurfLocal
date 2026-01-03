@@ -23,7 +23,7 @@ metadata:
 # ==============================================================================
 image:
   repository: surflocally/salt-app
-  tag: latest
+  tag: prod-latest
   pullPolicy: Always
   pullSecrets: []
 
