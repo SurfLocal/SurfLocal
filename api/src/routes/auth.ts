@@ -236,4 +236,16 @@ router.get('/check-admin', authenticate, asyncHandler(async (req: AuthRequest, r
   res.json({ is_admin: result.rows[0].is_admin });
 }));
 
+// Check if a specific user is admin (for display purposes, requires authentication)
+router.get('/check-admin/:userId', authenticate, asyncHandler(async (req: AuthRequest, res) => {
+  const { userId } = req.params;
+  
+  const result = await query(
+    "SELECT EXISTS(SELECT 1 FROM user_roles WHERE user_id = $1 AND role = 'admin') as is_admin",
+    [userId]
+  );
+  
+  res.json({ is_admin: result.rows[0].is_admin });
+}));
+
 export default router;

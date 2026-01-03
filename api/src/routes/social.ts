@@ -81,12 +81,21 @@ router.post('/sessions/:sessionId/comments', authenticate, asyncHandler(async (r
 router.delete('/comments/:commentId', authenticate, asyncHandler(async (req: AuthRequest, res) => {
   const { commentId } = req.params;
 
-  // Verify ownership
+  // Verify comment exists
   const commentCheck = await query('SELECT user_id FROM session_comments WHERE id = $1', [commentId]);
   if (commentCheck.rows.length === 0) {
     throw new ApiError(404, 'Comment not found');
   }
-  if (commentCheck.rows[0].user_id !== req.userId) {
+
+  // Check if user is admin
+  const adminCheck = await query(
+    "SELECT EXISTS(SELECT 1 FROM user_roles WHERE user_id = $1 AND role = 'admin') as is_admin",
+    [req.userId]
+  );
+  const isAdmin = adminCheck.rows[0].is_admin;
+
+  // Allow deletion if user owns the comment OR is admin
+  if (commentCheck.rows[0].user_id !== req.userId && !isAdmin) {
     throw new ApiError(403, 'Not authorized to delete this comment');
   }
 

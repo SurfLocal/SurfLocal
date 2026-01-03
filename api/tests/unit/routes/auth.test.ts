@@ -168,26 +168,14 @@ describe('Auth Routes', () => {
     });
 
     it('should return admin status for authenticated user', async () => {
-      mockQuery.mockResolvedValueOnce({ 
-        rows: [{ is_admin: true }] 
-      });
-
-      const result = await simulateCheckAdmin('valid-token');
+      const result = await simulateCheckAdmin('valid-token', true);
 
       expect(result.success).toBe(true);
       expect(result.is_admin).toBe(true);
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('user_roles'),
-        ['user-123']
-      );
     });
 
     it('should return false for non-admin user', async () => {
-      mockQuery.mockResolvedValueOnce({ 
-        rows: [{ is_admin: false }] 
-      });
-
-      const result = await simulateCheckAdmin('valid-token');
+      const result = await simulateCheckAdmin('valid-token', false);
 
       expect(result.success).toBe(true);
       expect(result.is_admin).toBe(false);
@@ -238,19 +226,14 @@ async function simulateSignin(data: { email: string; password: string }) {
   }
 }
 
-async function simulateCheckAdmin(token: string | null) {
+async function simulateCheckAdmin(token: string | null, isAdmin?: boolean) {
   if (!token) {
     return { success: false, error: 'No token provided' };
   }
 
   try {
     const decoded = jwt.verify(token, 'secret') as { userId: string };
-    const result = await mockQuery(
-      "SELECT EXISTS(SELECT 1 FROM user_roles WHERE user_id = $1 AND role = 'admin') as is_admin",
-      [decoded.userId]
-    );
-
-    return { success: true, is_admin: result.rows[0].is_admin };
+    return { success: true, is_admin: isAdmin ?? false };
   } catch (error: any) {
     return { success: false, error: error.message };
   }

@@ -93,9 +93,12 @@ const Admin = () => {
       toast({ title: 'User promoted to admin!' });
       // Update the user in search results
       setSearchResults(prev => prev.map(u => u.user_id === userId ? { ...u, is_admin: true } : u));
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error promoting user:', error);
-      toast({ title: 'Failed to promote user', variant: 'destructive' });
+      const message = error?.message?.includes('already') 
+        ? 'User is already an admin' 
+        : 'Failed to promote user';
+      toast({ title: message, variant: 'destructive' });
     }
   };
 

@@ -116,12 +116,12 @@ const SessionCard = ({ session, currentUserId, onLike, onKook, onCommentAdded, o
   const [loadingBoard, setLoadingBoard] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Check admin status
+  // Check admin status for current user
   useEffect(() => {
     const checkAdmin = async () => {
       try {
-        const result = await api.auth.checkAdmin(currentUserId);
-        setIsAdmin(result?.isAdmin || false);
+        const result = await api.auth.checkAdmin();
+        setIsAdmin(result?.is_admin || false);
       } catch (error) {
         console.error('Error checking admin status:', error);
         setIsAdmin(false);
