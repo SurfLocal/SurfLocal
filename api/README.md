@@ -191,12 +191,89 @@ API endpoints are rate-limited to prevent abuse:
 
 See `salt_api.Dockerfile` for containerization.
 
+## Testing
+
+The API includes a comprehensive test suite using Jest with unit and integration tests.
+
+### Test Structure
+
+```
+api/tests/
+├── setup.ts                      # Jest setup and environment config
+├── mocks/                        # Shared test mocks
+│   ├── auth.ts                   # Authentication mocks
+│   └── database.ts               # Database query mocks
+├── unit/                         # Unit tests
+│   ├── middleware/
+│   │   ├── auth.test.ts          # Auth middleware tests
+│   │   └── errorHandler.test.ts  # Error handler tests
+│   └── routes/
+│       ├── auth.test.ts          # Auth routes tests
+│       ├── boards.test.ts        # Boards routes tests
+│       ├── profiles.test.ts      # Profiles routes tests
+│       ├── sessions.test.ts      # Sessions routes tests
+│       └── social.test.ts        # Social routes tests
+└── integration/
+    └── api.test.ts               # API integration tests
+```
+
+### Running Tests
+
+#### Install Test Dependencies
+
+```bash
+cd api
+npm install
+```
+
+#### Run All Tests
+
+```bash
+npm test
+```
+
+#### Run Tests in Watch Mode
+
+```bash
+npm test -- --watch
+```
+
+#### Run Tests with Coverage
+
+```bash
+npm test -- --coverage
+```
+
+#### Run Specific Test File
+
+```bash
+npm test -- tests/unit/routes/auth.test.ts
+```
+
+#### Run Tests Matching Pattern
+
+```bash
+npm test -- --testNamePattern="auth"
+```
+
+### Test Coverage
+
+Coverage reports are generated in the `coverage/` directory. View the HTML report by opening `coverage/lcov-report/index.html`.
+
+### Writing New Tests
+
+1. Place unit tests in `tests/unit/` following the source structure
+2. Place integration tests in `tests/integration/`
+3. Use the provided mocks in `tests/mocks/` for database and auth
+4. Follow the existing test patterns for consistency
+
 ## Next Steps
 
 1. Install dependencies: `npm install`
 2. Configure environment: `cp .env.example .env`
 3. Start development server: `npm run dev`
-4. Test endpoints: `curl http://localhost:3000/health`
+4. Run tests: `npm test`
+5. Test endpoints: `curl http://localhost:3000/health`
 
 ## Authentication
 
