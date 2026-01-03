@@ -14,6 +14,7 @@ import StreakPanel from '@/components/StreakPanel';
 import SessionCard from '@/components/SessionCard';
 import shakaIcon from '@/assets/shaka.png';
 import kookIcon from '@/assets/kook.png';
+import { formatStatNumber } from '@/lib/formatNumber';
 
 interface SessionData {
   id: string;
@@ -312,14 +313,14 @@ const Sessions = () => {
           <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-4 py-3">
             <img src={shakaIcon} alt="Shaka" className="h-6 w-6 object-contain" />
             <div>
-              <p className="text-lg font-bold text-foreground">{profile?.total_shakas_received || 0}</p>
+              <p className="text-lg font-bold text-foreground">{formatStatNumber(profile?.total_shakas_received || 0)}</p>
               <p className="text-xs text-muted-foreground">Shakas Thrown</p>
             </div>
           </div>
           <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-4 py-3">
             <img src={kookIcon} alt="Kook" className="h-6 w-6 object-contain" />
             <div>
-              <p className="text-lg font-bold text-foreground">{profile?.total_kooks_received || 0}</p>
+              <p className="text-lg font-bold text-foreground">{formatStatNumber(profile?.total_kooks_received || 0)}</p>
               <p className="text-xs text-muted-foreground">Scrub it Kook!</p>
             </div>
           </div>
@@ -349,15 +350,15 @@ const Sessions = () => {
             <p className="text-xs text-muted-foreground">Hours Surfed</p>
           </div>
           <div className="bg-muted/50 rounded-lg p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{stats.totalWaves}</p>
+            <p className="text-2xl font-bold text-foreground">{formatStatNumber(stats.totalWaves)}</p>
             <p className="text-xs text-muted-foreground">Waves</p>
           </div>
           <div className="bg-muted/50 rounded-lg p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{stats.totalBarrels}</p>
+            <p className="text-2xl font-bold text-foreground">{formatStatNumber(stats.totalBarrels)}</p>
             <p className="text-xs text-muted-foreground">Barrels</p>
           </div>
           <div className="bg-muted/50 rounded-lg p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{stats.totalAirs}</p>
+            <p className="text-2xl font-bold text-foreground">{formatStatNumber(stats.totalAirs)}</p>
             <p className="text-xs text-muted-foreground">Airs</p>
           </div>
           <div className="bg-muted/50 rounded-lg p-4 text-center col-span-2 sm:col-span-1 min-w-0">

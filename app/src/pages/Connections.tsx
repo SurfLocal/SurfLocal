@@ -64,6 +64,15 @@ const Connections = () => {
     try {
       await api.social.follow(user.id, targetUserId);
       setMyFollowing(prev => new Set([...prev, targetUserId]));
+      
+      // If viewing own profile, update the following list
+      if (userId === user.id) {
+        const userData = followers.find(f => f.user_id === targetUserId) || 
+                        following.find(f => f.user_id === targetUserId);
+        if (userData && !following.find(f => f.user_id === targetUserId)) {
+          setFollowing(prev => [...prev, userData]);
+        }
+      }
     } catch (error) {
       console.error('Error following:', error);
     }
@@ -78,6 +87,11 @@ const Connections = () => {
         next.delete(targetUserId);
         return next;
       });
+      
+      // If viewing own profile, update the following list and count
+      if (userId === user.id) {
+        setFollowing(prev => prev.filter(f => f.user_id !== targetUserId));
+      }
     } catch (error) {
       console.error('Error unfollowing:', error);
     }
@@ -113,14 +127,14 @@ const Connections = () => {
       </Link>
       {u.user_id !== user.id && (
         myFollowing.has(u.user_id) ? (
-          <Button variant="outline" size="sm" onClick={() => handleUnfollow(u.user_id)}>
-            <UserMinus className="h-4 w-4 mr-1" />
-            Unfollow
+          <Button variant="outline" size="sm" onClick={() => handleUnfollow(u.user_id)} className="flex-shrink-0">
+            <UserMinus className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">Unfollow</span>
           </Button>
         ) : (
-          <Button size="sm" onClick={() => handleFollow(u.user_id)}>
-            <UserPlus className="h-4 w-4 mr-1" />
-            Follow
+          <Button size="sm" onClick={() => handleFollow(u.user_id)} className="flex-shrink-0">
+            <UserPlus className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">Follow</span>
           </Button>
         )
       )}

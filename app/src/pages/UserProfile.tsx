@@ -15,6 +15,7 @@ import ShakaIcon from '@/components/icons/ShakaIcon';
 import shakaIcon from '@/assets/shaka.png';
 import kookIcon from '@/assets/kook.png';
 import SessionCard from '@/components/SessionCard';
+import { formatStatNumber } from '@/lib/formatNumber';
 import WeeklyActivityChart from '@/components/WeeklyActivityChart';
 import StreakPanel from '@/components/StreakPanel';
 import ImageLightbox from '@/components/ImageLightbox';
@@ -340,8 +341,24 @@ const UserProfile = () => {
   return (
     <Layout allowScroll>
       <div className="container mx-auto px-4 py-8 max-w-2xl space-y-6">
-        <Card>
+        <Card className="relative">
           <CardHeader>
+            {/* Follow/Unfollow button - Mobile: top right, Desktop: top right */}
+            {userId && user && userId !== user.id && (
+              <div className="absolute top-4 right-4 z-10">
+                {isFollowing ? (
+                  <Button variant="outline" onClick={handleUnfollow} size="sm" className="text-xs sm:text-sm px-2 sm:px-3 h-8 sm:h-9">
+                    <UserMinus className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">Unfollow</span>
+                  </Button>
+                ) : (
+                  <Button onClick={handleFollow} size="sm" className="text-xs sm:text-sm px-2 sm:px-3 h-8 sm:h-9">
+                    <UserPlus className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">Follow</span>
+                  </Button>
+                )}
+              </div>
+            )}
             <div className="flex items-start gap-4">
               <Avatar className="h-20 w-20">
                 <AvatarImage src={profile.avatar_url || undefined} alt="Profile" />
@@ -350,7 +367,7 @@ const UserProfile = () => {
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
                   <div className="min-w-0 flex-1">
                     <CardTitle className="text-2xl break-words">{profile.display_name || 'Surfer'}</CardTitle>
                     {profile.home_break && (
@@ -360,17 +377,6 @@ const UserProfile = () => {
                       </p>
                     )}
                   </div>
-                  {isFollowing ? (
-                    <Button variant="outline" onClick={handleUnfollow} size="sm" className="flex-shrink-0 text-[10px] sm:text-sm px-1.5 sm:px-3 h-7 sm:h-9">
-                      <UserMinus className="h-3 w-3 sm:h-4 sm:w-4 mr-0.5 sm:mr-2" />
-                      Unfollow
-                    </Button>
-                  ) : (
-                    <Button onClick={handleFollow} size="sm" className="flex-shrink-0 text-[10px] sm:text-sm px-1.5 sm:px-3 h-7 sm:h-9">
-                      <UserPlus className="h-3 w-3 sm:h-4 sm:w-4 mr-0.5 sm:mr-2" />
-                      Follow
-                    </Button>
-                  )}
                 </div>
               </div>
             </div>
@@ -412,14 +418,14 @@ const UserProfile = () => {
               <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-4 py-3">
                 <img src={shakaIcon} alt="Shaka" className="h-6 w-6 object-contain" />
                 <div>
-                  <p className="text-lg font-bold text-foreground">{profile.total_shakas_received || 0}</p>
+                  <p className="text-lg font-bold text-foreground">{formatStatNumber(profile.total_shakas_received || 0)}</p>
                   <p className="text-xs text-muted-foreground">Shakas Thrown</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-4 py-3">
                 <img src={kookIcon} alt="Kook" className="h-6 w-6 object-contain" />
                 <div>
-                  <p className="text-lg font-bold text-foreground">{profile.total_kooks_received || 0}</p>
+                  <p className="text-lg font-bold text-foreground">{formatStatNumber(profile.total_kooks_received || 0)}</p>
                   <p className="text-xs text-muted-foreground">Scrub it Kook!</p>
                 </div>
               </div>
@@ -445,19 +451,19 @@ const UserProfile = () => {
             {/* Statistics */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               <div className="bg-muted/50 rounded-lg p-4 text-center">
-                <p className="text-2xl font-bold text-foreground">{stats.totalSessions}</p>
+                <p className="text-2xl font-bold text-foreground">{formatStatNumber(stats.totalSessions)}</p>
                 <p className="text-xs text-muted-foreground">Sessions</p>
               </div>
               <div className="bg-muted/50 rounded-lg p-4 text-center">
-                <p className="text-2xl font-bold text-foreground">{stats.totalWaves}</p>
+                <p className="text-2xl font-bold text-foreground">{formatStatNumber(stats.totalWaves)}</p>
                 <p className="text-xs text-muted-foreground">Waves</p>
               </div>
               <div className="bg-muted/50 rounded-lg p-4 text-center">
-                <p className="text-2xl font-bold text-foreground">{stats.totalBarrels}</p>
+                <p className="text-2xl font-bold text-foreground">{formatStatNumber(stats.totalBarrels)}</p>
                 <p className="text-xs text-muted-foreground">Barrels</p>
               </div>
               <div className="bg-muted/50 rounded-lg p-4 text-center">
-                <p className="text-2xl font-bold text-foreground">{stats.totalAirs}</p>
+                <p className="text-2xl font-bold text-foreground">{formatStatNumber(stats.totalAirs)}</p>
                 <p className="text-xs text-muted-foreground">Airs</p>
               </div>
               <div className="bg-muted/50 rounded-lg p-4 text-center col-span-2 sm:col-span-1 min-w-0">

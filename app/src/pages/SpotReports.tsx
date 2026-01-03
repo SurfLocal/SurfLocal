@@ -185,6 +185,8 @@ const SpotReports = () => {
   const [loadingFavorites, setLoadingFavorites] = useState(false);
   const [accessedFromFavorites, setAccessedFromFavorites] = useState(false);
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [touchCurrentY, setTouchCurrentY] = useState<number | null>(null);
 
   const currentDate = format(new Date(), 'EEEE, MMMM d');
   const timezone = 'America/Los_Angeles';
@@ -194,12 +196,17 @@ const SpotReports = () => {
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
 
-  // Check admin status - TODO: Add admin check endpoint
+  // Check admin status
   useEffect(() => {
     const checkAdmin = async () => {
       if (!user) return;
-      // TODO: Implement admin check via API
-      setIsAdmin(false);
+      try {
+        const result = await api.auth.checkAdmin(user.id);
+        setIsAdmin(result.is_admin || false);
+      } catch (error) {
+        console.error('Error checking admin status:', error);
+        setIsAdmin(false);
+      }
     };
     checkAdmin();
   }, [user]);
@@ -361,7 +368,41 @@ const SpotReports = () => {
   const handleDragEnd = async () => {
     if (!draggedItem) return;
     setDraggedItem(null);
+    setTouchStartY(null);
+    setTouchCurrentY(null);
     // TODO: Update display_order via API
+  };
+
+  // Touch event handlers for mobile drag-and-drop
+  const handleTouchStart = (e: React.TouchEvent, id: string) => {
+    setDraggedItem(id);
+    setTouchStartY(e.touches[0].clientY);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!draggedItem || touchStartY === null) return;
+    
+    const currentY = e.touches[0].clientY;
+    setTouchCurrentY(currentY);
+    
+    // Find the element under the touch point
+    const elements = document.elementsFromPoint(e.touches[0].clientX, currentY);
+    const favoriteElement = elements.find(el => el.hasAttribute('data-favorite-id'));
+    
+    if (favoriteElement) {
+      const targetId = favoriteElement.getAttribute('data-favorite-id');
+      if (targetId && targetId !== draggedItem) {
+        const draggedIndex = favoriteSpots.findIndex(f => f.id === draggedItem);
+        const targetIndex = favoriteSpots.findIndex(f => f.id === targetId);
+        
+        if (draggedIndex !== -1 && targetIndex !== -1) {
+          const newFavorites = [...favoriteSpots];
+          const [removed] = newFavorites.splice(draggedIndex, 1);
+          newFavorites.splice(targetIndex, 0, removed);
+          setFavoriteSpots(newFavorites);
+        }
+      }
+    }
   };
 
 // Padding for desktop flyTo to offset for the report panel on the right
@@ -2141,11 +2182,13 @@ const handleSpotClick = (spot: Spot) => {
                           return (
                             <div
                               key={fav.id}
+                              data-favorite-id={fav.id}
                               draggable
                               onDragStart={() => handleDragStart(fav.id)}
                               onDragOver={(e) => handleDragOver(e, fav.id)}
                               onDragEnd={handleDragEnd}
-                              onTouchStart={() => handleDragStart(fav.id)}
+                              onTouchStart={(e) => handleTouchStart(e, fav.id)}
+                              onTouchMove={handleTouchMove}
                               onTouchEnd={handleDragEnd}
                               className={`flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors border border-border ${draggedItem === fav.id ? 'opacity-50' : ''}`}
                             >
@@ -2386,6 +2429,22 @@ const handleSpotClick = (spot: Spot) => {
                                       <img src={kookIcon} alt="Kook" className={`h-7 w-7 object-contain ${comment.is_kooked ? 'scale-110' : ''} transition-transform`} />
                                       {comment.kooks_count > 0 && comment.kooks_count}
                                     </button>
+                                    <button 
+                                      onClick={() => setReplyingTo(comment.id)} 
+                                      className="text-xs text-muted-foreground hover:text-foreground p-1"
+                                      title="Reply"
+                                    >
+                                      <Reply className="h-3 w-3" />
+                                    </button>
+                                    {(user?.id === comment.user_id || isAdmin) && (
+                                      <button 
+                                        onClick={() => handleDeleteComment(comment.id, comment.user_id)} 
+                                        className="text-xs text-destructive/60 hover:text-destructive p-1 ml-auto"
+                                        title="Delete"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               </div>
