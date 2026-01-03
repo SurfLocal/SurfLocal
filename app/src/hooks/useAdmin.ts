@@ -16,13 +16,8 @@ export const useAdmin = () => {
       }
 
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/auth/check-admin/${user.id}`);
-        if (response.ok) {
-          const data = await response.json();
-          setIsAdmin(data.isAdmin || false);
-        } else {
-          setIsAdmin(false);
-        }
+        const data = await api.auth.checkAdmin();
+        setIsAdmin(data.is_admin || false);
       } catch (error) {
         console.error('Failed to check admin status:', error);
         setIsAdmin(false);

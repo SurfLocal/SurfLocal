@@ -226,13 +226,11 @@ router.post('/confirm-reset', asyncHandler(async (req: Request, res: Response) =
   res.json({ message: 'Password reset successfully' });
 }));
 
-// Check if user is admin
-router.get('/check-admin/:user_id', asyncHandler(async (req, res) => {
-  const { user_id } = req.params;
-  
+// Check if current user is admin (requires authentication)
+router.get('/check-admin', authenticate, asyncHandler(async (req: AuthRequest, res) => {
   const result = await query(
     "SELECT EXISTS(SELECT 1 FROM user_roles WHERE user_id = $1 AND role = 'admin') as is_admin",
-    [user_id]
+    [req.userId]
   );
   
   res.json({ is_admin: result.rows[0].is_admin });
