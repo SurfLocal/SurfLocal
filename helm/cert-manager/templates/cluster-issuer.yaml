@@ -1,0 +1,43 @@
+{{- if .Values.clusterIssuers.production.enabled }}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.clusterIssuers.production.name }}
+  labels:
+    {{- include "salt-cert-manager.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+spec:
+  acme:
+    server: {{ .Values.clusterIssuers.production.server }}
+    email: {{ .Values.clusterIssuers.email }}
+    privateKeySecretRef:
+      name: {{ .Values.clusterIssuers.production.privateKeySecretRef }}
+    solvers:
+    - http01:
+        ingress:
+          class: {{ .Values.ingressClass }}
+{{- end }}
+---
+{{- if .Values.clusterIssuers.qa.enabled }}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.clusterIssuers.qa.name }}
+  labels:
+    {{- include "salt-cert-manager.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+spec:
+  acme:
+    server: {{ .Values.clusterIssuers.qa.server }}
+    email: {{ .Values.clusterIssuers.email }}
+    privateKeySecretRef:
+      name: {{ .Values.clusterIssuers.qa.privateKeySecretRef }}
+    solvers:
+    - http01:
+        ingress:
+          class: {{ .Values.ingressClass }}
+{{- end }}

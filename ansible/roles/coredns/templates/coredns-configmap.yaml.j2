@@ -33,3 +33,4 @@ data:
     {{ hostvars['worker2']['ansible_default_ipv4']['address'] }} worker2
     {{ hostvars['worker3']['ansible_default_ipv4']['address'] }} worker3
     {{ hostvars['postgres']['ansible_default_ipv4']['address'] }} postgres
+    {{ traefik_cluster_ip | default('10.43.245.181') }} surflocal.app www.surflocal.app api.surflocal.app

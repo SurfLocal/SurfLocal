@@ -1,0 +1,225 @@
+# ==============================================================================
+# GLOBAL CONFIGURATION
+# ==============================================================================
+global:
+  environment: prod
+  clusterDomain: cluster.local
+  imagePullSecrets: []
+
+# ==============================================================================
+# UPSTREAM CERT-MANAGER CONFIGURATION
+# ==============================================================================
+# Configuration passed to the upstream cert-manager dependency
+upstream:
+  installCRDs: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  webhook:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  cainjector:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+# ==============================================================================
+# METADATA
+# ==============================================================================
+metadata:
+  namespace: cert-manager
+  labels:
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/component: certificate-management
+    app.kubernetes.io/part-of: cert-manager
+    app.kubernetes.io/managed-by: Helm
+  annotations: {}
+
+# ==============================================================================
+# IMAGE CONFIGURATION
+# ==============================================================================
+image:
+  repository: quay.io/jetstack/cert-manager-controller
+  tag: v1.14.4
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# Webhook image
+webhook:
+  image:
+    repository: quay.io/jetstack/cert-manager-webhook
+    tag: v1.14.4
+
+# CA Injector image
+cainjector:
+  image:
+    repository: quay.io/jetstack/cert-manager-cainjector
+    tag: v1.14.4
+
+# ==============================================================================
+# DEPLOYMENT CONFIGURATION
+# ==============================================================================
+deployment:
+  replicaCount: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  podDisruptionBudget:
+    enabled: false
+  restartPolicy: Always
+
+# ==============================================================================
+# RESOURCE MANAGEMENT
+# ==============================================================================
+# Conservative limits for Raspberry Pi 4 (4GB RAM)
+resources:
+  controller:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+  webhook:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 25m
+      memory: 64Mi
+  cainjector:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 25m
+      memory: 64Mi
+
+# ==============================================================================
+# SECURITY
+# ==============================================================================
+securityContext:
+  pod:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  container:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL
+
+rbac:
+  enabled: true
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+
+# ==============================================================================
+# CLUSTER ISSUERS
+# ==============================================================================
+# Configuration for Let's Encrypt certificate issuers
+clusterIssuers:
+  # Email for Let's Encrypt notifications
+  email: surflocal.ai@gmail.com
+  
+  # Production issuer (rate limited, use for production certificates)
+  production:
+    enabled: true
+    name: letsencrypt-prod
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef: letsencrypt-prod-key
+  
+  # QA/Staging issuer (not rate limited, use for testing)
+  qa:
+    enabled: true
+    name: letsencrypt-qa
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    privateKeySecretRef: letsencrypt-qa-key
+
+# Ingress class for HTTP-01 challenge solver
+ingressClass: traefik
+
+# ==============================================================================
+# HEALTH CHECKS
+# ==============================================================================
+healthChecks:
+  liveness:
+    enabled: true
+    httpGet:
+      path: /livez
+      port: 9402
+      scheme: HTTP
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 15
+    successThreshold: 1
+    failureThreshold: 8
+  readiness:
+    enabled: true
+    httpGet:
+      path: /healthz
+      port: 6080
+      scheme: HTTP
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 5
+    successThreshold: 1
+    failureThreshold: 3
+
+# ==============================================================================
+# SCHEDULING
+# ==============================================================================
+scheduling:
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+
+# ==============================================================================
+# MONITORING
+# ==============================================================================
+monitoring:
+  metrics:
+    enabled: true
+    port: 9402
+    path: /metrics
+    serviceMonitor:
+      enabled: false
+      interval: 30s
+  logging:
+    level: info
+    format: json
+
+# ==============================================================================
+# INSTALLATION OPTIONS
+# ==============================================================================
+# Install CRDs with the chart
+installCRDs: true
+
+# Enable webhook component
+enableWebhook: true
+
+# Enable CA injector component
+enableCAInjector: true

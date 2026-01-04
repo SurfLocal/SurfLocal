@@ -11,7 +11,7 @@ keywords:
   - express
   - nodejs
 maintainers:
-  - name: Rob Ronayne
-home: https://github.com/robronayne/Salt
+  - name: Salt Platform
+home: https://github.com/SurfLocal/Salt
 sources:
-  - https://github.com/robronayne/Salt
+  - https://github.com/SurfLocal/Salt

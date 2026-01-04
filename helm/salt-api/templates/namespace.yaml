@@ -3,5 +3,4 @@ kind: Namespace
 metadata:
   name: {{ .Values.metadata.namespace }}
   labels:
-    name: {{ .Values.metadata.namespace }}
-    app.kubernetes.io/part-of: salt
+    {{- include "salt-api.labels" . | nindent 4 }}
