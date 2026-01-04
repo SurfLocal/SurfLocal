@@ -1,0 +1,23 @@
+apiVersion: v2
+name: cert-manager
+description: Certificate management for Kubernetes with Let's Encrypt integration
+version: 0.1.0
+appVersion: "1.14.4"
+type: application
+keywords:
+  - certificates
+  - tls
+  - ssl
+  - letsencrypt
+  - acme
+  - security
+maintainers:
+  - name: Salt Platform
+home: https://cert-manager.io/
+sources:
+  - https://github.com/cert-manager/cert-manager
+dependencies:
+  - name: cert-manager
+    version: "1.14.4"
+    repository: "https://charts.jetstack.io"
+    alias: upstream

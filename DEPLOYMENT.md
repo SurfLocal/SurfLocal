@@ -8,10 +8,11 @@ High-level overview of the Salt surf tracking application infrastructure and how
 ┌───────────────────────────────────────────────────────────────────┐
 │                        Kubernetes Cluster                         │
 │                                                                   │
-│  ┌─────────────┐                                                  │
-│  │   Nginx     │  ← Ingress Controller                            │
-│  │  Port: 80   │                                                  │
-│  └──────┬──────┘                                                  │
+│  ┌─────────────┐  ┌─────────────┐                                 │
+│  │  Traefik    │  │cert-manager │                                 │
+│  │  Ingress    │  │ (TLS Certs) │                                 │
+│  │ Port: 80/443│  │             │                                 │
+│  └──────┬──────┘  └─────────────┘                                 │
 │         │                                                         │
 │         ├──────────────┬──────────────┬──────────────┐            │
 │         │              │              │              │            │
@@ -234,11 +235,13 @@ Frontend → Backend API → PostgreSQL (likes/comments/follows tables)
 
 ### Namespace Organization
 
-- **default** - Frontend and Backend applications
+- **salt** - Frontend and Backend applications
 - **storage** - MinIO object storage
 - **database** - PostgreSQL (bare metal, not in Kubernetes)
 - **monitoring** - Prometheus and Grafana
 - **argo** - Argo Workflows
+- **cert-manager** - Certificate management
+- **kube-system** - Traefik ingress controller (K3s default)
 
 This separation provides:
 - Resource isolation
@@ -272,13 +275,48 @@ This separation provides:
 - Health checks and auto-restart
 - Resource limits and requests
 
-### Ingress (Coming Soon)
+### 7. Ingress Controller (Traefik)
 
-**Nginx Ingress Controller** will provide:
-- Single entry point for all traffic
-- TLS termination
+**Purpose:** Routes external HTTP/HTTPS traffic to internal services.
+
+**Deployment:** K3s default installation in `kube-system` namespace.
+
+**Features:**
+- Single entry point for all external traffic
+- TLS termination with Let's Encrypt certificates
 - Path-based routing (/api → backend, / → frontend)
 - Load balancing across replicas
+- Automatic HTTPS redirect
+
+**Service Configuration:**
+- HTTP: Port 80 (NodePort 31923)
+- HTTPS: Port 443 (NodePort 30226)
+- LoadBalancer IPs: 192.168.1.67-70 (all cluster nodes)
+
+**Documentation:** See `networking/README.md`
+
+### 8. Certificate Management (cert-manager)
+
+**Purpose:** Automated TLS certificate provisioning and renewal.
+
+**Deployment:** Helm chart in `cert-manager` namespace.
+
+**Components:**
+- **cert-manager controller** - Manages certificate lifecycle
+- **webhook** - Validates certificate resources
+- **cainjector** - Injects CA bundles into webhooks
+
+**ClusterIssuers:**
+- `letsencrypt-prod` - Production certificates (rate limited)
+- `letsencrypt-qa` - QA/staging certificates (not rate limited)
+
+**Configuration:**
+- ACME protocol with Let's Encrypt
+- HTTP-01 challenge via Traefik ingress
+- Email: surflocal.ai@gmail.com
+- CoreDNS override for DNS hairpin workaround (resolves surflocal.app to Traefik internally)
+
+**Documentation:** See `helm/cert-manager/README.md`
 
 ## Security & Secrets Management
 
@@ -369,32 +407,3 @@ Environment variables are configured at deployment time:
 3. **Monitoring** - Helm charts deploy Prometheus/Grafana (optional)
 4. **Workflows** - Helm chart deploys Argo (optional)
 5. **Application** - Docker images built and deployed to Kubernetes
-
-### Future Enhancements
-
-- **Nginx Ingress** - Single entry point with TLS
-- **Redis Caching** - Reduce database load
-- **CI/CD Pipeline** - Automated builds and deployments
-- **Automated Backups** - Scheduled database backups
-- **Distributed MinIO** - Multi-node object storage
-- **Read Replicas** - PostgreSQL read scaling
-
-## Documentation
-
-For detailed deployment instructions and configuration:
-
-**Infrastructure:**
-- `ansible/README.md` - PostgreSQL deployment
-- `helm/README.md` - Kubernetes deployments
-- `helm/minio/README.md` - Object storage setup
-- `helm/prometheus/README.md` - Monitoring setup
-- `helm/argo-workflows/README.md` - Workflow orchestration
-
-**Applications:**
-- `api/README.md` - Backend API details
-- `app/README.md` - Frontend application details
-- `postgres/README.md` - Database schema
-
-**Development:**
-- `api/AUTH_IMPLEMENTATION.md` - Authentication details
-- `api/REDIS_CACHING.md` - Future caching implementation

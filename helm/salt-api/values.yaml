@@ -69,11 +69,20 @@ service:
   sessionAffinity: None
 
 ingress:
-  enabled: false
-  className: ""
-  annotations: {}
-  hosts: []
-  tls: []
+  enabled: true
+  className: traefik
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.tls: "true"
+  hosts:
+    - host: surflocal.app
+      paths:
+        - path: /api
+          pathType: Prefix
+  tls:
+    - secretName: surflocal-api-tls
+      hosts:
+        - surflocal.app
 
 # ==============================================================================
 # SECURITY
@@ -143,11 +152,12 @@ config:
 # Secrets (should be provided via --set or external secret management)
 secrets:
   # Database password - REQUIRED
-  databasePassword: ""
+  databasePassword: "fidelio"
   # MinIO secret key - REQUIRED  
-  minioSecretKey: ""
+  minioSecretKey: "fidelio!"
   # JWT secret - REQUIRED (generate with: openssl rand -base64 32)
-  jwtSecret: ""
+  jwtSecret: "YL1XEz7v3ZprqipNAGD8/KZBj05WWD89bDJjiE9CKI4=
+"
 
 # ==============================================================================
 # HEALTH CHECKS
