@@ -1,0 +1,25 @@
+{{- if .Values.dashboards.networkingMetrics.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "grafana.fullname" . }}-dashboard-networking
+  namespace: {{ .Values.metadata.namespace }}
+  labels:
+    {{- include "grafana.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  networking-metrics.json: |
+    {{- $panels := list
+      "dashboards/networking/01-total-requests.json"
+      "dashboards/networking/02-requests-per-second.json"
+      "dashboards/networking/03-response-status-codes.json"
+      "dashboards/networking/04-5xx-errors.json"
+      "dashboards/networking/05-4xx-errors.json"
+      "dashboards/networking/06-active-connections.json"
+      "dashboards/networking/07-request-duration.json"
+      "dashboards/networking/08-entrypoint-requests.json"
+      "dashboards/networking/09-error-rate.json"
+      "dashboards/networking/10-bytes-transferred.json"
+    -}}
+    {{ include "grafana.assembleDashboard" (dict "base" "dashboards/networking/_dashboard.json" "panels" $panels "ctx" .) | nindent 4 }}
+{{- end }}

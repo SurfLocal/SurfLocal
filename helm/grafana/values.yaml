@@ -146,6 +146,11 @@ dashboards:
   postgresMetrics:
     enabled: true
     title: "PostgreSQL - Database Metrics"
+  
+  # Networking/Traefik metrics dashboard
+  networkingMetrics:
+    enabled: true
+    title: "Networking - Traefik Ingress Metrics"
 
 # ==============================================================================
 # HEALTH CHECKS

@@ -151,6 +151,10 @@ config:
         - worker2:10250
         - worker3:10250
       metricsPath: /metrics/cadvisor
+    
+    - jobName: traefik
+      targets:
+        - traefik-metrics.kube-system.svc.cluster.local:9100
 
 # ==============================================================================
 # HEALTH CHECKS
