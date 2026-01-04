@@ -10,7 +10,7 @@ keywords:
   - metrics
   - observability
 maintainers:
-  - name: SurfLocal Backend
+  - name: Salt Platform
 home: https://prometheus.io/
 sources:
   - https://github.com/prometheus/prometheus

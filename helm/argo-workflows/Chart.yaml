@@ -11,7 +11,7 @@ keywords:
   - cicd
   - automation
 maintainers:
-  - name: SurfLocal Backend
+  - name: Salt Platform
 home: https://argoproj.github.io/argo-workflows/
 sources:
   - https://github.com/argoproj/argo-workflows

@@ -462,28 +462,6 @@ Each chart must have a README with:
 5. **Upgrading**: Upgrade instructions
 6. **Uninstalling**: How to remove
 
-### NOTES.txt
-
-Provide post-installation instructions:
-
-```
-Thank you for installing {{ .Chart.Name }}.
-
-Your release is named {{ .Release.Name }}.
-
-To learn more about the release, try:
-
-  $ helm status {{ .Release.Name }}
-  $ helm get all {{ .Release.Name }}
-
-To access the application:
-  {{ if .Values.ingress.enabled }}
-  http://{{ index .Values.ingress.hosts 0 }}
-  {{- else }}
-  kubectl port-forward svc/{{ include "mychart.fullname" . }} 8080:80
-  {{- end }}
-```
-
 ## Examples
 
 See the following charts for reference implementations:

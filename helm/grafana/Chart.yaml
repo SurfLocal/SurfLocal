@@ -10,7 +10,7 @@ keywords:
   - dashboards
   - visualization
 maintainers:
-  - name: SurfLocal Backend
+  - name: Salt Platform
 home: https://grafana.com/
 sources:
   - https://github.com/grafana/grafana
